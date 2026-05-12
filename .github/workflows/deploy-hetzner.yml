@@ -1,0 +1,35 @@
+name: Deploy to Hetzner CX33
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ruflo/**'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        default: 'main'
+
+env:
+  APP_DIR: /opt/ruflo
+  SSH_USER: ops
+
+jobs:
+  deploy:
+    name: Deploy RuFlo
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ env.SSH_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          port: ${{ secrets.HETZNER_SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            export APP_DIR=${{ env.APP_DIR }}
+            bash ${{ env.APP_DIR }}/ruflo/scripts/deploy.sh ${{ inputs.branch || 'main' }}
