@@ -20,21 +20,21 @@
 
 		// Nodes — tightly clustered around center where RuFlo text sits
 		const nodes = [
-			{ x: 0.50, y: 0.50, r: 4, color: "#3b82f6" },
-			{ x: 0.35, y: 0.42, r: 2.5, color: "#06b6d4" },
-			{ x: 0.65, y: 0.42, r: 2.5, color: "#818cf8" },
-			{ x: 0.38, y: 0.58, r: 2.5, color: "#2dd4bf" },
-			{ x: 0.62, y: 0.58, r: 2.5, color: "#a78bfa" },
-			{ x: 0.26, y: 0.50, r: 2, color: "#38bdf8" },
-			{ x: 0.74, y: 0.50, r: 2, color: "#c084fc" },
-			{ x: 0.44, y: 0.35, r: 2, color: "#22d3ee" },
-			{ x: 0.56, y: 0.65, r: 2, color: "#6366f1" },
-			{ x: 0.30, y: 0.62, r: 1.8, color: "#0ea5e9" },
-			{ x: 0.70, y: 0.62, r: 1.8, color: "#8b5cf6" },
-			{ x: 0.42, y: 0.70, r: 1.8, color: "#14b8a6" },
-			{ x: 0.58, y: 0.35, r: 1.8, color: "#60a5fa" },
-			{ x: 0.32, y: 0.34, r: 1.8, color: "#34d399" },
-			{ x: 0.68, y: 0.34, r: 1.8, color: "#a855f7" },
+			{ x: 0.50, y: 0.50, r: 4, color: "#00d084" },
+			{ x: 0.35, y: 0.42, r: 2.5, color: "#227ec5" },
+			{ x: 0.65, y: 0.42, r: 2.5, color: "#9b51e0" },
+			{ x: 0.38, y: 0.58, r: 2.5, color: "#00b37d" },
+			{ x: 0.62, y: 0.58, r: 2.5, color: "#7c3aed" },
+			{ x: 0.26, y: 0.50, r: 2, color: "#2ba8e0" },
+			{ x: 0.74, y: 0.50, r: 2, color: "#b366e8" },
+			{ x: 0.44, y: 0.35, r: 2, color: "#00d084" },
+			{ x: 0.56, y: 0.65, r: 2, color: "#9b51e0" },
+			{ x: 0.30, y: 0.62, r: 1.8, color: "#227ec5" },
+			{ x: 0.70, y: 0.62, r: 1.8, color: "#7c3aed" },
+			{ x: 0.42, y: 0.70, r: 1.8, color: "#00b37d" },
+			{ x: 0.58, y: 0.35, r: 1.8, color: "#2ba8e0" },
+			{ x: 0.32, y: 0.34, r: 1.8, color: "#00d084" },
+			{ x: 0.68, y: 0.34, r: 1.8, color: "#b366e8" },
 		];
 
 		const edges: [number, number][] = [
@@ -72,7 +72,7 @@
 			animId = requestAnimationFrame(draw);
 			time += 0.008;
 
-			ctx.fillStyle = "#06060f";
+			ctx.fillStyle = "#0a0e1a";
 			ctx.fillRect(0, 0, width, height);
 
 			// Stars
@@ -95,7 +95,7 @@
 				ctx.beginPath();
 				ctx.moveTo(px[a], py[a]);
 				ctx.lineTo(px[b], py[b]);
-				ctx.strokeStyle = `rgba(59,130,246,${alpha})`;
+				ctx.strokeStyle = `rgba(0,208,132,${alpha})`;
 				ctx.lineWidth = 1;
 				ctx.stroke();
 			}
@@ -108,7 +108,7 @@
 				const y = py[a] + (py[b] - py[a]) * p.t;
 				ctx.beginPath();
 				ctx.arc(x, y, 1.2, 0, Math.PI * 2);
-				ctx.fillStyle = "rgba(96,165,250,0.7)";
+				ctx.fillStyle = "rgba(0,208,132,0.7)";
 				ctx.fill();
 			}
 
@@ -118,7 +118,7 @@
 			ctx.rotate(time * 0.2);
 			ctx.beginPath();
 			ctx.ellipse(0, 0, 45, 20, 0, 0, Math.PI * 2);
-			ctx.strokeStyle = "rgba(59,130,246,0.1)";
+			ctx.strokeStyle = "rgba(0,208,132,0.1)";
 			ctx.lineWidth = 1.5;
 			ctx.stroke();
 			ctx.restore();
@@ -128,7 +128,7 @@
 			ctx.rotate(-time * 0.15 + 0.5);
 			ctx.beginPath();
 			ctx.ellipse(0, 0, 55, 25, 0.4, 0, Math.PI * 2);
-			ctx.strokeStyle = "rgba(129,140,248,0.07)";
+			ctx.strokeStyle = "rgba(155,81,224,0.07)";
 			ctx.lineWidth = 1.5;
 			ctx.stroke();
 			ctx.restore();
@@ -166,7 +166,7 @@
 
 <div
 	class="relative h-full w-full overflow-hidden"
-	style="background: #06060f;"
+	style="background: #0a0e1a;"
 >
 	<canvas
 		bind:this={canvas}
@@ -175,8 +175,8 @@
 	<!-- Overlay text -->
 	<div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
 		<h2
-			class="text-3xl font-light tracking-[0.3em] text-indigo-100"
-			style="text-shadow: 0 0 20px rgba(99, 102, 241, 0.5), 0 0 40px rgba(99, 102, 241, 0.2);"
+			class="text-3xl font-light tracking-[0.3em] text-green-100"
+			style="text-shadow: 0 0 20px rgba(0, 208, 132, 0.5), 0 0 40px rgba(0, 208, 132, 0.2);"
 		>
 			RuFlo
 		</h2>

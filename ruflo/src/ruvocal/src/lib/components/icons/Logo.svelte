@@ -22,16 +22,16 @@
 >
 	<defs>
 		<linearGradient id="wave-grad-1" x1="0" y1="0" x2="1" y2="0">
-			<stop offset="0%" stop-color="#3b82f6" />
-			<stop offset="100%" stop-color="#06b6d4" />
+			<stop offset="0%" stop-color="#00d084" />
+			<stop offset="100%" stop-color="#00b37d" />
 		</linearGradient>
 		<linearGradient id="wave-grad-2" x1="0" y1="0" x2="1" y2="0">
-			<stop offset="0%" stop-color="#818cf8" />
-			<stop offset="100%" stop-color="#a78bfa" />
+			<stop offset="0%" stop-color="#9b51e0" />
+			<stop offset="100%" stop-color="#7c3aed" />
 		</linearGradient>
 		<linearGradient id="wave-grad-3" x1="0" y1="0" x2="1" y2="0">
-			<stop offset="0%" stop-color="#06b6d4" />
-			<stop offset="100%" stop-color="#2dd4bf" />
+			<stop offset="0%" stop-color="#227ec5" />
+			<stop offset="100%" stop-color="#06b6d4" />
 		</linearGradient>
 	</defs>
 
