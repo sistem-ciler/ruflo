@@ -1,0 +1,24 @@
+# CSaaS Platform — Prometheus Configuration
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "gateway"
+    static_configs:
+      - targets: ["gateway:4000"]
+    metrics_path: "/metrics"
+    scrape_interval: 10s
+
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Future services will be added here:
+  # - job_name: "cctv-operator"
+  #   static_configs:
+  #     - targets: ["cctv-operator:4001"]
+  # - job_name: "cybersecurity"
+  #   static_configs:
+  #     - targets: ["cybersecurity:4002"]
