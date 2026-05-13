@@ -6,6 +6,7 @@ import {
 } from "../core/security.js";
 import { Errors } from "../core/result.js";
 import { getEngineStatus, analyzeFrame } from "./engine.js";
+import { getLlmStatus, chat } from "../core/llm.js";
 import type { DetectionClass } from "./types.js";
 import { createEvent } from "../cctv/service.js";
 
@@ -18,7 +19,12 @@ function authUser(req: Request): AuthenticatedRequest {
 anywareRouter.use(authenticate);
 
 anywareRouter.get("/status", (_req: Request, res: Response) => {
-  res.json({ data: getEngineStatus() });
+  res.json({
+    data: {
+      ...getEngineStatus(),
+      llm: getLlmStatus(),
+    },
+  });
 });
 
 const analyzeSchema = z.object({
@@ -70,4 +76,60 @@ anywareRouter.post("/analyze", async (req: Request, res: Response) => {
   }
 
   res.json({ data: analysis });
+});
+
+const describeSituationSchema = z.object({
+  cameraId: z.string().uuid(),
+  detections: z.array(
+    z.object({
+      eventType: z.string(),
+      confidence: z.number(),
+      label: z.string(),
+    })
+  ),
+  context: z.string().max(500).optional(),
+});
+
+anywareRouter.post("/describe", async (req: Request, res: Response) => {
+  const parsed = describeSituationSchema.safeParse(req.body);
+  if (!parsed.success) {
+    const error = Errors.validation(parsed.error.flatten().fieldErrors);
+    res.status(error.statusCode).json({ error });
+    return;
+  }
+
+  const { detections, context } = parsed.data;
+  const detectionSummary = detections
+    .map((d) => `${d.label} (${(d.confidence * 100).toFixed(0)}%)`)
+    .join(", ");
+
+  try {
+    const result = await chat([
+      {
+        role: "system",
+        content:
+          "You are AnywareAI, a professional CCTV security analyst. " +
+          "Given detection results from a camera feed, provide a concise " +
+          "situation assessment (2-3 sentences) and recommend an action.",
+      },
+      {
+        role: "user",
+        content:
+          `Detections: ${detectionSummary}` +
+          (context ? `\nOperator context: ${context}` : ""),
+      },
+    ]);
+    res.json({
+      data: {
+        description: result.content,
+        model: result.model,
+        provider: result.provider,
+        usage: result.usage,
+      },
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "LLM call failed";
+    const error = Errors.internal(msg);
+    res.status(error.statusCode).json({ error });
+  }
 });

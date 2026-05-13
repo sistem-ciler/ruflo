@@ -27,6 +27,23 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
 
+  // LLM — OpenRouter (cloud)
+  OPENROUTER_API_KEY: z.string().optional(),
+  OPENROUTER_BASE_URL: z
+    .string()
+    .url()
+    .default("https://openrouter.ai/api/v1"),
+  OPENROUTER_MODEL: z.string().default("openai/gpt-4o-mini"),
+
+  // LLM — Ollama (local)
+  OLLAMA_URL: z.string().url().default("http://ollama:11434"),
+  OLLAMA_MODEL: z.string().default("llama3"),
+
+  // LLM provider preference: "openrouter" | "ollama" | "auto"
+  LLM_PROVIDER: z
+    .enum(["openrouter", "ollama", "auto"])
+    .default("auto"),
+
   // CORS
   CORS_ORIGINS: z.string().default("http://localhost:3000"),
 
