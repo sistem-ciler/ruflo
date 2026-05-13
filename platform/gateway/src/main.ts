@@ -15,6 +15,13 @@ import {
 import { closeQueues } from "./core/events.js";
 import { authRouter } from "./auth/router.js";
 import { tenantRouter } from "./tenants/router.js";
+import { cctvRouter } from "./cctv/router.js";
+import { anywareRouter } from "./anyware-ai/router.js";
+
+// BigInt JSON serialization (PostgreSQL bigserial returns BigInt)
+(BigInt.prototype as unknown as { toJSON: () => string }).toJSON = function () {
+  return this.toString();
+};
 
 const config = getConfig();
 const app = express();
@@ -111,6 +118,8 @@ app.get("/metrics", (_req, res) => {
 
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/tenants", tenantRouter);
+app.use("/api/v1/cctv", cctvRouter);
+app.use("/api/v1/anyware", anywareRouter);
 
 // ─── 404 handler ────────────────────────────────────────────
 
