@@ -10,7 +10,7 @@ import {
   Roles,
   type Role,
 } from "../core/security.js";
-import { ok, err, Errors, type Result, type AppError } from "../core/result.js";
+import { ok, err, Errors, type Result } from "../core/result.js";
 import type { RegisterInput, LoginInput } from "./schemas.js";
 
 interface AuthTokens {

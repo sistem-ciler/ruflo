@@ -3,8 +3,7 @@ import bcrypt from "bcryptjs";
 import type { Request, Response, NextFunction } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { getConfig } from "./config.js";
-import { Errors, type AppError } from "./result.js";
-import { logger } from "./logger.js";
+import { Errors } from "./result.js";
 
 // --- Branded IDs ---
 export type TenantId = string & { readonly __brand: "TenantId" };
@@ -51,7 +50,7 @@ export interface JwtPayload {
 export function signAccessToken(payload: Omit<JwtPayload, "type">): string {
   const config = getConfig();
   return jwt.sign({ ...payload, type: "access" }, config.JWT_SECRET, {
-    expiresIn: config.JWT_ACCESS_TTL,
+    expiresIn: config.JWT_ACCESS_TTL as string & jwt.SignOptions["expiresIn"],
     algorithm: "HS256",
   });
 }
@@ -59,7 +58,7 @@ export function signAccessToken(payload: Omit<JwtPayload, "type">): string {
 export function signRefreshToken(payload: Omit<JwtPayload, "type">): string {
   const config = getConfig();
   return jwt.sign({ ...payload, type: "refresh" }, config.JWT_SECRET, {
-    expiresIn: config.JWT_REFRESH_TTL,
+    expiresIn: config.JWT_REFRESH_TTL as string & jwt.SignOptions["expiresIn"],
     algorithm: "HS256",
   });
 }

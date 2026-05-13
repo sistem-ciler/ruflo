@@ -1,9 +1,11 @@
 import amqplib from "amqplib";
-import type { Channel, Connection } from "amqplib";
+import type { Channel } from "amqplib";
 import { getConfig } from "./config.js";
 import { logger } from "./logger.js";
 
-let connection: Connection | undefined;
+type AmqpConnection = Awaited<ReturnType<typeof amqplib.connect>>;
+
+let connection: AmqpConnection | undefined;
 let channel: Channel | undefined;
 
 // Exchange and queue definitions
@@ -27,29 +29,31 @@ export async function connectRabbitMQ(): Promise<Channel> {
   if (channel) return channel;
 
   const config = getConfig();
-  connection = await amqplib.connect(config.RABBITMQ_URL);
+  const conn = await amqplib.connect(config.RABBITMQ_URL);
+  connection = conn;
 
-  connection.on("error", (err) => {
+  conn.on("error", (err: Error) => {
     logger.error({ err }, "RabbitMQ connection error");
   });
 
-  connection.on("close", () => {
+  conn.on("close", () => {
     logger.warn("RabbitMQ connection closed");
     channel = undefined;
     connection = undefined;
   });
 
-  channel = await connection.createChannel();
-  await channel.prefetch(10);
+  const ch = await conn.createChannel();
+  channel = ch;
+  await ch.prefetch(10);
 
   // Declare exchanges
   for (const exchange of Object.values(Exchanges)) {
-    await channel.assertExchange(exchange, "topic", { durable: true });
+    await ch.assertExchange(exchange, "topic", { durable: true });
   }
 
   // Declare queues with dead-letter
   for (const queue of Object.values(Queues)) {
-    await channel.assertQueue(queue, {
+    await ch.assertQueue(queue, {
       durable: true,
       arguments: {
         "x-dead-letter-exchange": `${Exchanges.EVENTS}.dlx`,
@@ -59,18 +63,18 @@ export async function connectRabbitMQ(): Promise<Channel> {
   }
 
   // Dead-letter exchange
-  await channel.assertExchange(`${Exchanges.EVENTS}.dlx`, "fanout", {
+  await ch.assertExchange(`${Exchanges.EVENTS}.dlx`, "fanout", {
     durable: true,
   });
-  await channel.assertQueue(`${Exchanges.EVENTS}.dlq`, { durable: true });
-  await channel.bindQueue(
+  await ch.assertQueue(`${Exchanges.EVENTS}.dlq`, { durable: true });
+  await ch.bindQueue(
     `${Exchanges.EVENTS}.dlq`,
     `${Exchanges.EVENTS}.dlx`,
     ""
   );
 
   logger.info("RabbitMQ connected, exchanges and queues declared");
-  return channel;
+  return ch;
 }
 
 export function getChannel(): Channel | undefined {
