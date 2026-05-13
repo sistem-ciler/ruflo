@@ -26,6 +26,12 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  tenantSlug: z
+    .string()
+    .min(2)
+    .max(100)
+    .regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with dashes")
+    .describe("Tenant slug to log into"),
 });
 
 export const refreshSchema = z.object({

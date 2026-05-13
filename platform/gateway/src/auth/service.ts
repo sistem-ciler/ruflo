@@ -26,72 +26,77 @@ interface AuthTokens {
   };
 }
 
+const PG_UNIQUE_VIOLATION = "23505";
+
 export async function registerTenant(
   input: RegisterInput
 ): Promise<Result<AuthTokens>> {
   const db = getDb();
-
-  // Check slug uniqueness
-  const existing = await db
-    .select({ id: tenants.id })
-    .from(tenants)
-    .where(eq(tenants.slug, input.tenantSlug))
-    .limit(1);
-
-  if (existing.length > 0) {
-    return err(Errors.conflict(`Tenant slug '${input.tenantSlug}' already exists`));
-  }
-
-  // Create tenant
-  const [tenant] = await db
-    .insert(tenants)
-    .values({
-      name: input.tenantName,
-      slug: input.tenantSlug,
-      status: "trial",
-    })
-    .returning();
-
-  if (!tenant) {
-    return err(Errors.internal("Failed to create tenant"));
-  }
-
-  // Create admin user
   const passwordHash = await hashPassword(input.password);
-  const [user] = await db
-    .insert(users)
-    .values({
-      tenantId: tenant.id,
-      email: input.email,
-      passwordHash,
-      name: input.name,
-      role: Roles.OWNER,
-    })
-    .returning();
 
-  if (!user) {
-    return err(Errors.internal("Failed to create user"));
+  try {
+    const result = await db.transaction(async (tx) => {
+      const [tenant] = await tx
+        .insert(tenants)
+        .values({
+          name: input.tenantName,
+          slug: input.tenantSlug,
+          status: "trial",
+        })
+        .returning();
+
+      if (!tenant) {
+        return err(Errors.internal("Failed to create tenant"));
+      }
+
+      const [user] = await tx
+        .insert(users)
+        .values({
+          tenantId: tenant.id,
+          email: input.email,
+          passwordHash,
+          name: input.name,
+          role: Roles.OWNER,
+        })
+        .returning();
+
+      if (!user) {
+        return err(Errors.internal("Failed to create user"));
+      }
+
+      const tokenPayload = {
+        sub: user.id,
+        tenantId: tenant.id,
+        role: user.role as Role,
+        email: user.email,
+      };
+
+      return ok({
+        accessToken: signAccessToken(tokenPayload),
+        refreshToken: signRefreshToken(tokenPayload),
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role as Role,
+          tenantId: tenant.id,
+          tenantName: tenant.name,
+        },
+      });
+    });
+
+    return result;
+  } catch (e: unknown) {
+    if (
+      typeof e === "object" &&
+      e !== null &&
+      "code" in e &&
+      (e as { code: string }).code === PG_UNIQUE_VIOLATION
+    ) {
+      return err(Errors.conflict(`Tenant slug '${input.tenantSlug}' already exists`));
+    }
+    throw e;
   }
-
-  const tokenPayload = {
-    sub: user.id,
-    tenantId: tenant.id,
-    role: user.role as Role,
-    email: user.email,
-  };
-
-  return ok({
-    accessToken: signAccessToken(tokenPayload),
-    refreshToken: signRefreshToken(tokenPayload),
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role as Role,
-      tenantId: tenant.id,
-      tenantName: tenant.name,
-    },
-  });
 }
 
 export async function login(
@@ -99,6 +104,18 @@ export async function login(
 ): Promise<Result<AuthTokens>> {
   const db = getDb();
 
+  // Resolve tenant by slug
+  const [tenant] = await db
+    .select({ id: tenants.id, name: tenants.name })
+    .from(tenants)
+    .where(eq(tenants.slug, input.tenantSlug))
+    .limit(1);
+
+  if (!tenant) {
+    return err(Errors.unauthorized("Invalid tenant, email, or password"));
+  }
+
+  // Find user scoped to the resolved tenant
   const [user] = await db
     .select({
       id: users.id,
@@ -109,24 +126,17 @@ export async function login(
       tenantId: users.tenantId,
     })
     .from(users)
-    .where(eq(users.email, input.email))
+    .where(and(eq(users.email, input.email), eq(users.tenantId, tenant.id)))
     .limit(1);
 
   if (!user) {
-    return err(Errors.unauthorized("Invalid email or password"));
+    return err(Errors.unauthorized("Invalid tenant, email, or password"));
   }
 
   const valid = await comparePassword(input.password, user.passwordHash);
   if (!valid) {
-    return err(Errors.unauthorized("Invalid email or password"));
+    return err(Errors.unauthorized("Invalid tenant, email, or password"));
   }
-
-  // Get tenant name
-  const [tenant] = await db
-    .select({ name: tenants.name })
-    .from(tenants)
-    .where(eq(tenants.id, user.tenantId))
-    .limit(1);
 
   // Update last login
   await db
@@ -150,7 +160,7 @@ export async function login(
       name: user.name,
       role: user.role as Role,
       tenantId: user.tenantId,
-      tenantName: tenant?.name ?? "",
+      tenantName: tenant.name,
     },
   });
 }
