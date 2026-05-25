@@ -1,0 +1,52 @@
+# Production overlay for getopscore.com
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  # --- VM Lifecycle Engine (new service) ---
+  vm-engine:
+    build:
+      context: ./src/vm-engine
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    expose:
+      - "4000"
+    environment:
+      PORT: "4000"
+      NODE_ENV: production
+      HETZNER_API_TOKEN: ${HETZNER_API_TOKEN:-}
+      HETZNER_DATACENTER: ${HETZNER_DATACENTER:-fsn1}
+      HETZNER_SERVER_TYPE: ${HETZNER_SERVER_TYPE:-cx22}
+      HETZNER_SSH_KEY_NAME: ${HETZNER_SSH_KEY_NAME:-}
+      HETZNER_PRIVATE_NETWORK_ID: ${HETZNER_PRIVATE_NETWORK_ID:-}
+      HETZNER_MAX_MONTHLY_EUR: ${HETZNER_MAX_MONTHLY_EUR:-50}
+      VM_QUEUE_DEPTH_THRESHOLD: ${VM_QUEUE_DEPTH_THRESHOLD:-10}
+      VM_COMPLEXITY_THRESHOLD: ${VM_COMPLEXITY_THRESHOLD:-0.70}
+      VM_SLA_BREACH_SECONDS: ${VM_SLA_BREACH_SECONDS:-300}
+      VM_WARM_POOL_SIZE: ${VM_WARM_POOL_SIZE:-0}
+      VM_IDLE_TIMEOUT_SECONDS: ${VM_IDLE_TIMEOUT_SECONDS:-600}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # --- Cloudflare Tunnel daemon ---
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    depends_on:
+      nginx:
+        condition: service_healthy
+      mcp-bridge:
+        condition: service_healthy
+      vm-engine:
+        condition: service_healthy
+
+  # --- MCP Bridge: enable VM tool group ---
+  mcp-bridge:
+    environment:
+      MCP_GROUP_VM: ${MCP_GROUP_VM:-true}
+      VM_ENGINE_URL: http://vm-engine:4000

@@ -11,6 +11,8 @@ const CLOUD_FUNCTIONS = {
   // research: process.env.RESEARCH_API_URL || "https://my-research-api.run.app",
 };
 
+const VM_ENGINE_URL = process.env.VM_ENGINE_URL || "http://vm-engine:4000";
+
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
 // =============================================================================
@@ -110,6 +112,13 @@ const TOOL_GROUPS = {
     enabled: process.env.MCP_GROUP_CODEX === "true",
     description: "OpenAI Codex coding agent — code generation and execution (requires OPENAI_API_KEY)",
     source: "codex",
+  },
+
+  // --- VM Lifecycle Engine ---
+  vm: {
+    enabled: process.env.MCP_GROUP_VM === "true",
+    description: "Hetzner VM lifecycle — autonomously create, destroy, and monitor worker VMs for scale-out",
+    source: "builtin",
   },
 };
 
@@ -319,6 +328,57 @@ process.on("SIGTERM", () => { for (const [, c] of mcpBackends) c.stop(); process
 process.on("SIGINT", () => { for (const [, c] of mcpBackends) c.stop(); process.exit(0); });
 
 // =============================================================================
+// VM TOOLS — proxied to vm-engine:4000 (vm group)
+// =============================================================================
+
+const VM_TOOLS = [
+  {
+    name: "vm_list",
+    description: "List all active Hetzner worker VMs managed by OpsCore. Returns pool status including VM count, IPs, task counts, and cost estimate.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "vm_create",
+    description: "Request creation of a new Hetzner worker VM. The decision engine evaluates cost ceiling and thresholds before provisioning.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        reason: { type: "string", description: "Why this VM is needed" },
+        complexity: { type: "number", description: "Task complexity score 0-1", default: 0.5 },
+        estimatedDurationMs: { type: "number", description: "Expected task duration in ms" },
+        requiredMemoryMb: { type: "number", description: "Required memory in MB" },
+      },
+      required: ["reason"],
+    },
+  },
+  {
+    name: "vm_destroy",
+    description: "Destroy a specific Hetzner worker VM by its pool ID.",
+    inputSchema: {
+      type: "object",
+      properties: { id: { type: "string", description: "VM pool ID to destroy" } },
+      required: ["id"],
+    },
+  },
+  {
+    name: "vm_status",
+    description: "Get VM engine health and current pool metrics including cost estimate.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "vm_decision",
+    description: "Ask the decision engine whether a VM should be created given current queue depth and complexity. Does not provision anything.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        queueDepth: { type: "number", description: "Current pending task count" },
+        complexityScore: { type: "number", description: "Task complexity 0-1" },
+      },
+    },
+  },
+];
+
+// =============================================================================
 // BUILT-IN TOOLS (core group — always on)
 // =============================================================================
 
@@ -358,7 +418,7 @@ const BUILTIN_TOOLS = [
       properties: {
         topic: {
           type: "string",
-          enum: ["overview", "groups", "intelligence", "agents", "memory", "devtools", "security", "browser", "neural", "agentic-flow", "claude-code", "gemini", "codex", "tool"],
+          enum: ["overview", "groups", "intelligence", "agents", "memory", "devtools", "security", "browser", "neural", "agentic-flow", "claude-code", "gemini", "codex", "vm", "tool"],
           description: "What to get guidance on. Use 'overview' for capabilities summary, 'groups' to see all tool groups and their status, or a specific group name for detailed usage instructions.",
           default: "overview",
         },
@@ -599,6 +659,23 @@ Requires: GOOGLE_API_KEY environment variable (already set for Gemini models).
 - Extended context conversations
 - Multimodal content processing`,
 
+    vm: `# VM Lifecycle Group (vm-engine)
+
+Autonomous Hetzner VM provisioning for scale-out compute.
+
+## Key Tools
+- **vm_list** — List all active worker VMs with IPs, task counts, and monthly cost estimate
+- **vm_create** — Request a new Hetzner VM (decision engine enforces cost ceiling and thresholds)
+- **vm_destroy** — Decommission a specific worker VM by ID
+- **vm_status** — Health check and current pool metrics
+- **vm_decision** — Query the decision engine: should a VM be created given current queue depth?
+
+## When to Use
+- Task queue exceeds container capacity (auto-triggered at ${process.env.VM_QUEUE_DEPTH_THRESHOLD || 10}+ tasks)
+- High-complexity tasks requiring dedicated compute
+- Explicit scale-out when SLA would otherwise be breached
+- Check current VM pool and cost before adding more`,
+
     codex: `# Codex Group
 
 OpenAI Codex coding agent.
@@ -801,6 +878,30 @@ async function executeTool(name, args) {
     case "guidance":
       return getGuidance(args.topic || "overview", args.tool_name);
 
+    case "vm_list":
+      return fetch(`${VM_ENGINE_URL}/vms`).then(r => r.json()).catch(e => ({ error: `vm-engine unavailable: ${e.message}` }));
+
+    case "vm_status":
+      return fetch(`${VM_ENGINE_URL}/health`).then(r => r.json()).catch(e => ({ error: `vm-engine unavailable: ${e.message}` }));
+
+    case "vm_create":
+      return fetch(`${VM_ENGINE_URL}/vms/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trigger: { type: "explicit_request", reason: args.reason || "agent request", taskSpec: { complexity: args.complexity || 0.5, estimatedDurationMs: args.estimatedDurationMs || 60000, requiredMemoryMb: args.requiredMemoryMb || 2048 } } }),
+      }).then(r => r.json()).catch(e => ({ error: `vm-engine unavailable: ${e.message}` }));
+
+    case "vm_destroy":
+      return fetch(`${VM_ENGINE_URL}/vms/${args.id}`, { method: "DELETE" })
+        .then(r => r.json()).catch(e => ({ error: `vm-engine unavailable: ${e.message}` }));
+
+    case "vm_decision":
+      return fetch(`${VM_ENGINE_URL}/decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queueDepth: args.queueDepth || 0, complexityScore: args.complexityScore || 0 }),
+      }).then(r => r.json()).catch(e => ({ error: `vm-engine unavailable: ${e.message}` }));
+
     default: {
       // Route to external MCP backend
       const activeTools = getActiveTools();
@@ -824,6 +925,7 @@ function getToolsForGroup(groupName) {
   const group = TOOL_GROUPS[groupName];
   if (!group || !group.enabled) return [];
   if (groupName === "core") return BUILTIN_TOOLS;
+  if (groupName === "vm") return VM_TOOLS;
 
   const allActive = getActiveTools();
   if (!group.prefixes) {
@@ -849,6 +951,7 @@ const GROUP_DISPLAY_NAMES = {
   "claude-code": "Claude Code",
   gemini: "Gemini",
   codex: "Codex",
+  vm: "VM Lifecycle",
 };
 
 // =============================================================================
@@ -938,7 +1041,8 @@ app.post("/mcp", async (req, res) => {
         });
       case "tools/list": {
         const activeTools = getActiveTools();
-        return res.json({ jsonrpc: "2.0", id, result: { tools: [...BUILTIN_TOOLS, ...activeTools] } });
+        const vmTools = TOOL_GROUPS.vm?.enabled ? VM_TOOLS : [];
+        return res.json({ jsonrpc: "2.0", id, result: { tools: [...BUILTIN_TOOLS, ...vmTools, ...activeTools] } });
       }
       case "tools/call": {
         const { name, arguments: toolArgs } = params;

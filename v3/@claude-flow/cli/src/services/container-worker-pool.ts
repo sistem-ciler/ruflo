@@ -269,7 +269,35 @@ export class ContainerWorkerPool extends EventEmitter {
         workerType: options.workerType,
         queuePosition: this.taskQueue.length,
       });
+
+      // Signal VM scale-out when queue depth exceeds threshold
+      const threshold = parseInt(process.env.VM_QUEUE_DEPTH_THRESHOLD || '10', 10);
+      if (this.taskQueue.length > threshold) {
+        this.requestVmScale('queue_overflow', {
+          complexity: 0.5,
+          estimatedDurationMs: 30000,
+          requiredMemoryMb: 2048,
+        });
+      }
     });
+  }
+
+  /**
+   * Signal the VM lifecycle engine to provision a Hetzner worker VM.
+   * No-ops gracefully when vm-engine is unreachable (container-only mode).
+   */
+  async requestVmScale(reason: string, taskSpec?: { complexity: number; estimatedDurationMs: number; requiredMemoryMb: number }): Promise<void> {
+    const vmEngineUrl = process.env.VM_ENGINE_URL || 'http://vm-engine:4000';
+    try {
+      await fetch(`${vmEngineUrl}/vms/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trigger: { type: 'explicit_request', reason, taskSpec } }),
+      });
+      this.emit('vmScaleRequested', { reason, taskSpec });
+    } catch {
+      this.emit('warning', { message: 'VM scale request failed — vm-engine not reachable, running container-only' });
+    }
   }
 
   /**
