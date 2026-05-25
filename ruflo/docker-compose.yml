@@ -49,8 +49,12 @@ services:
       MCP_GROUP_CLAUDE_CODE: ${MCP_GROUP_CLAUDE_CODE:-false}
       MCP_GROUP_GEMINI: ${MCP_GROUP_GEMINI:-false}
       MCP_GROUP_CODEX: ${MCP_GROUP_CODEX:-false}
+      MCP_GROUP_VM: ${MCP_GROUP_VM:-true}
+      VM_ENGINE_URL: http://vm-engine:4000
       # API keys for optional groups
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    depends_on:
+      - vm-engine
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health').then(r => process.exit(r.ok ? 0 : 1))"]
       interval: 30s
@@ -98,12 +102,40 @@ services:
         ALLOW_IFRAME=true
         OPENAI_BASE_URL=http://mcp-bridge:3001
         OPENAI_API_KEY=${OPENAI_API_KEY:-sk-placeholder}
-        MCP_SERVERS=[{"name":"Core Tools","url":"http://mcp-bridge:3001/mcp/core"},{"name":"Intelligence & Learning","url":"http://mcp-bridge:3001/mcp/intelligence"},{"name":"Agents & Orchestration","url":"http://mcp-bridge:3001/mcp/agents"},{"name":"Memory & Knowledge","url":"http://mcp-bridge:3001/mcp/memory"},{"name":"Dev Tools & Analysis","url":"http://mcp-bridge:3001/mcp/devtools"}]
+        MCP_SERVERS=[{"name":"Core Tools","url":"http://mcp-bridge:3001/mcp/core"},{"name":"Intelligence & Learning","url":"http://mcp-bridge:3001/mcp/intelligence"},{"name":"Agents & Orchestration","url":"http://mcp-bridge:3001/mcp/agents"},{"name":"Memory & Knowledge","url":"http://mcp-bridge:3001/mcp/memory"},{"name":"Dev Tools & Analysis","url":"http://mcp-bridge:3001/mcp/devtools"},{"name":"VM Lifecycle","url":"http://mcp-bridge:3001/mcp/vm"}]
         COOKIE_SECURE=${COOKIE_SECURE:-false}
         COOKIE_SAMESITE=${COOKIE_SAMESITE:-lax}
     depends_on:
       - mongodb
       - mcp-bridge
+
+  # --- VM Lifecycle Engine (Hetzner autonomous scaling) ---
+  vm-engine:
+    build:
+      context: ./src/vm-engine
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    expose:
+      - "4000"
+    environment:
+      PORT: "4000"
+      NODE_ENV: ${NODE_ENV:-development}
+      HETZNER_API_TOKEN: ${HETZNER_API_TOKEN:-}
+      HETZNER_DATACENTER: ${HETZNER_DATACENTER:-fsn1}
+      HETZNER_SERVER_TYPE: ${HETZNER_SERVER_TYPE:-cx22}
+      HETZNER_SSH_KEY_NAME: ${HETZNER_SSH_KEY_NAME:-}
+      HETZNER_PRIVATE_NETWORK_ID: ${HETZNER_PRIVATE_NETWORK_ID:-}
+      HETZNER_MAX_MONTHLY_EUR: ${HETZNER_MAX_MONTHLY_EUR:-50}
+      VM_QUEUE_DEPTH_THRESHOLD: ${VM_QUEUE_DEPTH_THRESHOLD:-10}
+      VM_COMPLEXITY_THRESHOLD: ${VM_COMPLEXITY_THRESHOLD:-0.70}
+      VM_SLA_BREACH_SECONDS: ${VM_SLA_BREACH_SECONDS:-300}
+      VM_WARM_POOL_SIZE: ${VM_WARM_POOL_SIZE:-0}
+      VM_IDLE_TIMEOUT_SECONDS: ${VM_IDLE_TIMEOUT_SECONDS:-600}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   mongo-data:
