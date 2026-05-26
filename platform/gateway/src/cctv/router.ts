@@ -13,6 +13,8 @@ import {
   listAlertsSchema,
   updateAlertSchema,
   createAlertSchema,
+  createFaceSchema,
+  updateFaceSchema,
   createSandboxSchema,
 } from "./schemas.js";
 import {
@@ -29,6 +31,11 @@ import {
   createAlert,
   updateAlert,
   acknowledgeAlert,
+  listFaces,
+  getFace,
+  createFace,
+  updateFace,
+  deleteFace,
   listSandboxes,
   provisionSandbox,
   destroySandbox,
@@ -275,6 +282,82 @@ cctvRouter.post(
       return;
     }
     res.json({ data: result.data });
+  }
+);
+
+// ─── Known Faces ────────────────────────────────────────────
+
+cctvRouter.get("/faces", async (req: Request, res: Response) => {
+  const { user } = authUser(req);
+  const result = await listFaces(user.tenantId);
+  if (!result.ok) {
+    res.status(result.error.statusCode).json({ error: result.error });
+    return;
+  }
+  res.json({ data: result.data });
+});
+
+cctvRouter.get("/faces/:id", async (req: Request, res: Response) => {
+  const { user } = authUser(req);
+  const result = await getFace(user.tenantId, paramId(req));
+  if (!result.ok) {
+    res.status(result.error.statusCode).json({ error: result.error });
+    return;
+  }
+  res.json({ data: result.data });
+});
+
+cctvRouter.post(
+  "/faces",
+  requireRole("operator"),
+  async (req: Request, res: Response) => {
+    const parsed = createFaceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const error = Errors.validation(parsed.error.flatten().fieldErrors);
+      res.status(error.statusCode).json({ error });
+      return;
+    }
+    const { user } = authUser(req);
+    const result = await createFace(user.tenantId, parsed.data);
+    if (!result.ok) {
+      res.status(result.error.statusCode).json({ error: result.error });
+      return;
+    }
+    res.status(201).json({ data: result.data });
+  }
+);
+
+cctvRouter.patch(
+  "/faces/:id",
+  requireRole("operator"),
+  async (req: Request, res: Response) => {
+    const parsed = updateFaceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const error = Errors.validation(parsed.error.flatten().fieldErrors);
+      res.status(error.statusCode).json({ error });
+      return;
+    }
+    const { user } = authUser(req);
+    const result = await updateFace(user.tenantId, paramId(req), parsed.data);
+    if (!result.ok) {
+      res.status(result.error.statusCode).json({ error: result.error });
+      return;
+    }
+    res.json({ data: result.data });
+  }
+);
+
+cctvRouter.delete(
+  "/faces/:id",
+  requireRole("admin"),
+  async (req: Request, res: Response) => {
+    const { user } = authUser(req);
+    const result = await deleteFace(user.tenantId, paramId(req));
+    if (!result.ok) {
+      res.status(result.error.statusCode).json({ error: result.error });
+      return;
+    }
+    res.status(204).end();
   }
 );
 
