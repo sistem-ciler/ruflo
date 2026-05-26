@@ -1,6 +1,6 @@
 import { eq, and, desc, gte, sql } from "drizzle-orm";
 import { getDb } from "../core/database.js";
-import { cameras, aiEvents, alerts, cuaSandboxes } from "../core/schema.js";
+import { cameras, aiEvents, alerts, knownFaces, cuaSandboxes } from "../core/schema.js";
 import { ok, err, Errors, type Result } from "../core/result.js";
 import { publishEvent, Exchanges } from "../core/rabbitmq.js";
 import { logger } from "../core/logger.js";
@@ -9,6 +9,8 @@ import type {
   UpdateCameraInput,
   CreateEventInput,
   CreateAlertInput,
+  CreateFaceInput,
+  UpdateFaceInput,
 } from "./schemas.js";
 
 // ─── Camera Service ─────────────────────────────────────────
@@ -457,6 +459,97 @@ export async function getSandbox(
 
   if (!sandbox) return err(Errors.notFound("Sandbox", sandboxId));
   return ok(sandbox);
+}
+
+// ─── Known Faces Service ────────────────────────────────────
+
+export async function listFaces(
+  tenantId: string
+): Promise<Result<typeof knownFaces.$inferSelect[]>> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(knownFaces)
+    .where(eq(knownFaces.tenantId, tenantId))
+    .orderBy(desc(knownFaces.createdAt));
+  return ok(rows);
+}
+
+export async function getFace(
+  tenantId: string,
+  faceId: string
+): Promise<Result<typeof knownFaces.$inferSelect>> {
+  const db = getDb();
+  const [face] = await db
+    .select()
+    .from(knownFaces)
+    .where(and(eq(knownFaces.id, faceId), eq(knownFaces.tenantId, tenantId)))
+    .limit(1);
+
+  if (!face) return err(Errors.notFound("Face", faceId));
+  return ok(face);
+}
+
+export async function createFace(
+  tenantId: string,
+  input: CreateFaceInput
+): Promise<Result<typeof knownFaces.$inferSelect>> {
+  const db = getDb();
+  const [face] = await db
+    .insert(knownFaces)
+    .values({
+      tenantId,
+      name: input.name,
+      category: input.category,
+      photoUrl: input.photoUrl,
+      metadata: input.metadata ?? {},
+    })
+    .returning();
+
+  if (!face) return err(Errors.internal("Failed to create face"));
+  return ok(face);
+}
+
+export async function updateFace(
+  tenantId: string,
+  faceId: string,
+  input: UpdateFaceInput
+): Promise<Result<typeof knownFaces.$inferSelect>> {
+  const db = getDb();
+
+  const existing = await getFace(tenantId, faceId);
+  if (!existing.ok) return existing;
+
+  const updates: Record<string, unknown> = {};
+  if (input.name !== undefined) updates.name = input.name;
+  if (input.category !== undefined) updates.category = input.category;
+  if (input.photoUrl !== undefined) updates.photoUrl = input.photoUrl;
+  if (input.metadata !== undefined) updates.metadata = input.metadata;
+
+  const [updated] = await db
+    .update(knownFaces)
+    .set(updates)
+    .where(and(eq(knownFaces.id, faceId), eq(knownFaces.tenantId, tenantId)))
+    .returning();
+
+  if (!updated) return err(Errors.internal("Failed to update face"));
+  return ok(updated);
+}
+
+export async function deleteFace(
+  tenantId: string,
+  faceId: string
+): Promise<Result<{ deleted: true }>> {
+  const db = getDb();
+
+  const existing = await getFace(tenantId, faceId);
+  if (!existing.ok) return existing;
+
+  await db
+    .delete(knownFaces)
+    .where(and(eq(knownFaces.id, faceId), eq(knownFaces.tenantId, tenantId)));
+
+  return ok({ deleted: true as const });
 }
 
 // ─── Analytics Service ──────────────────────────────────────

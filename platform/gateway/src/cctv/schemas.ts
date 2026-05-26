@@ -85,6 +85,29 @@ export const createAlertSchema = z.object({
 });
 export type CreateAlertInput = z.infer<typeof createAlertSchema>;
 
+// ─── Known Faces Schemas ────────────────────────────────────
+
+export const createFaceSchema = z.object({
+  name: z.string().min(1).max(255),
+  category: z.enum(["known", "vip", "blocklist", "employee"]).default("known"),
+  photoUrl: z.string().url().optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+export type CreateFaceInput = z.infer<typeof createFaceSchema>;
+
+export const updateFaceSchema = z
+  .object({
+    name: z.string().min(1).max(255).optional(),
+    category: z.enum(["known", "vip", "blocklist", "employee"]).optional(),
+    photoUrl: z.string().url().nullable().optional(),
+    metadata: z.record(z.unknown()).optional(),
+  })
+  .refine(
+    (data) => Object.values(data).some((v) => v !== undefined),
+    { message: "At least one field must be provided" }
+  );
+export type UpdateFaceInput = z.infer<typeof updateFaceSchema>;
+
 // ─── CUA Sandbox Schemas ────────────────────────────────────
 
 export const createSandboxSchema = z.object({
