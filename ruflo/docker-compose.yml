@@ -96,8 +96,10 @@ services:
         LLM_SUMMARIZATION=true
         ENABLE_DATA_EXPORT=true
         ALLOW_IFRAME=true
-        OPENAI_BASE_URL=http://mcp-bridge:3001
-        OPENAI_API_KEY=${OPENAI_API_KEY:-sk-placeholder}
+        OPENAI_BASE_URL=https://openrouter.ai/api/v1
+        OPENAI_API_KEY=${OPENROUTER_API_KEY:-sk-placeholder}
+        MODELS=[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","description":"Anthropic latest fast and capable model."},{"id":"anthropic/claude-sonnet-4","displayName":"Claude Sonnet 4","description":"Advanced reasoning and coding from Anthropic."},{"id":"anthropic/claude-opus-4.7","displayName":"Claude Opus 4.7","description":"Most powerful Claude model for complex tasks."},{"id":"anthropic/claude-3.5-haiku","displayName":"Claude 3.5 Haiku","description":"Fast lightweight Claude model."},{"id":"google/gemini-2.5-pro-preview","displayName":"Gemini 2.5 Pro","description":"Google most capable model with deep thinking."},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash","description":"Fast and efficient Gemini model."},{"id":"openai/gpt-4.1","displayName":"GPT-4.1","description":"OpenAI latest GPT with improved reasoning."},{"id":"openai/gpt-4o","displayName":"GPT-4o","description":"OpenAI multimodal flagship model."},{"id":"openai/gpt-4o-mini","displayName":"GPT-4o Mini","description":"Fast and affordable OpenAI model."},{"id":"openai/o3-mini","displayName":"o3-mini","description":"OpenAI reasoning model for STEM."},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","description":"Meta latest open model with strong performance."},{"id":"deepseek/deepseek-r1","displayName":"DeepSeek R1","description":"Advanced reasoning with chain-of-thought."}]
+        TASK_MODEL=anthropic/claude-3.5-haiku
         MCP_SERVERS=[{"name":"Core Tools","url":"http://mcp-bridge:3001/mcp/core"},{"name":"Intelligence & Learning","url":"http://mcp-bridge:3001/mcp/intelligence"},{"name":"Agents & Orchestration","url":"http://mcp-bridge:3001/mcp/agents"},{"name":"Memory & Knowledge","url":"http://mcp-bridge:3001/mcp/memory"},{"name":"Dev Tools & Analysis","url":"http://mcp-bridge:3001/mcp/devtools"}]
         COOKIE_SECURE=${COOKIE_SECURE:-false}
         COOKIE_SAMESITE=${COOKIE_SAMESITE:-lax}
