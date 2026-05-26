@@ -1,0 +1,34 @@
+# CSaaS Platform — Caddy Reverse Proxy
+# Auto-TLS, rate limiting, tenant routing
+
+{
+	admin off
+}
+
+# Default: use domain or fallback to :80
+:80 {
+	# API Gateway
+	handle /api/v1/* {
+		reverse_proxy gateway:4000
+	}
+
+	# WebSocket
+	handle /ws/* {
+		reverse_proxy gateway:4000
+	}
+
+	# Health checks (passthrough)
+	handle /health/* {
+		reverse_proxy gateway:4000
+	}
+
+	# Metrics (internal only — block external access in production)
+	handle /metrics {
+		respond "Forbidden" 403
+	}
+
+	# Dashboard (Next.js) — placeholder until dashboard service is built
+	handle {
+		respond "CSaaS Platform — Dashboard coming soon" 200
+	}
+}
