@@ -27,8 +27,8 @@
 		respond "Forbidden" 403
 	}
 
-	# Dashboard (Next.js) — placeholder until dashboard service is built
+	# Dashboard (Next.js)
 	handle {
-		respond "CSaaS Platform — Dashboard coming soon" 200
+		reverse_proxy dashboard:3000
 	}
 }
