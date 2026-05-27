@@ -44,28 +44,30 @@ export default function CCTVPage() {
     fps: "30",
   });
 
-  const cameras = useApi<{ cameras: CameraDevice[]; total: number }>("/api/v1/cctv/cameras?limit=50");
-  const faces = useApi<{ faces: KnownFace[]; total: number }>("/api/v1/cctv/faces?limit=50");
+  const cameras = useApi<CameraDevice[]>("/api/v1/cctv/cameras?limit=50");
+  const faces = useApi<KnownFace[]>("/api/v1/cctv/faces?limit=50");
+
+  const [addError, setAddError] = useState("");
 
   async function addCamera(e: React.FormEvent) {
     e.preventDefault();
     if (!token) return;
     setAdding(true);
+    setAddError("");
     try {
-      await api.post(
-        "/api/v1/cctv/cameras",
-        {
-          name: addForm.name,
-          location: addForm.location,
-          rtspUrl: addForm.rtspUrl,
-          resolution: addForm.resolution,
-          fps: parseInt(addForm.fps),
-        },
-        token
-      );
+      const body: Record<string, unknown> = {
+        name: addForm.name,
+        location: addForm.location || undefined,
+        resolution: addForm.resolution,
+        fps: parseInt(addForm.fps),
+      };
+      if (addForm.rtspUrl) body.rtspUrl = addForm.rtspUrl;
+      await api.post("/api/v1/cctv/cameras", body, token);
       cameras.refetch();
       setShowAdd(false);
       setAddForm({ name: "", location: "", rtspUrl: "", resolution: "1920x1080", fps: "30" });
+    } catch (err: unknown) {
+      setAddError(err instanceof Error ? err.message : "Failed to add camera");
     } finally {
       setAdding(false);
     }
@@ -93,6 +95,9 @@ export default function CCTVPage() {
       {showAdd && (
         <form onSubmit={addCamera} className="card p-6 mb-8">
           <h3 className="text-sm font-semibold mb-4">New Camera</h3>
+          {addError && (
+            <div className="mb-4 rounded-lg bg-red-950/50 border border-red-800 px-4 py-3 text-sm text-red-300">{addError}</div>
+          )}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <input
               required
@@ -109,8 +114,7 @@ export default function CCTVPage() {
               className="rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-brand-500"
             />
             <input
-              required
-              placeholder="rtsp://camera-ip:554/stream"
+              placeholder="rtsp://camera-ip:554/stream (optional)"
               value={addForm.rtspUrl}
               onChange={(e) => setAddForm((f) => ({ ...f, rtspUrl: e.target.value }))}
               className="rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-brand-500"
@@ -156,51 +160,52 @@ export default function CCTVPage() {
       {/* Camera Grid */}
       {tab === "cameras" && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {cameras.data?.cameras?.map((cam) => (
-            <div key={cam.id} className="card-hover overflow-hidden">
-              {/* Simulated camera feed placeholder */}
-              <div className="relative h-40 bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
-                <Camera className="h-12 w-12 text-slate-700" />
-                <div className="absolute top-3 left-3 flex items-center gap-1.5">
-                  {cam.status === "online" ? (
-                    <Wifi className="h-3.5 w-3.5 text-green-400" />
-                  ) : (
-                    <WifiOff className="h-3.5 w-3.5 text-slate-500" />
-                  )}
-                  <span
-                    className={clsx(
-                      "rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase",
-                      statusBadge[cam.status] ?? statusBadge.offline
-                    )}
-                  >
-                    {cam.status}
-                  </span>
-                </div>
-                {cam.status === "online" && (
-                  <div className="absolute top-3 right-3">
-                    <div className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
-                  </div>
-                )}
-              </div>
-              <div className="p-4">
-                <h3 className="font-medium text-sm">{cam.name}</h3>
-                <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
-                  <MapPin className="h-3 w-3" /> {cam.location}
-                </div>
-                <div className="mt-2 flex items-center gap-3 text-xs text-slate-500">
-                  <span>{cam.resolution || "—"}</span>
-                  <span>{cam.fps ? `${cam.fps} fps` : ""}</span>
-                </div>
-              </div>
-            </div>
-          )) ?? (
+          {cameras.loading ? (
             <div className="col-span-full py-12 text-center text-slate-500">
-              {cameras.loading ? (
-                <Loader2 className="h-5 w-5 animate-spin mx-auto" />
-              ) : (
-                "No cameras configured. Click 'Add Camera' to get started."
-              )}
+              <Loader2 className="h-5 w-5 animate-spin mx-auto" />
             </div>
+          ) : (cameras.data ?? []).length === 0 ? (
+            <div className="col-span-full py-12 text-center text-slate-500">
+              No cameras configured. Click &quot;Add Camera&quot; to get started.
+            </div>
+          ) : (
+            (cameras.data ?? []).map((cam) => (
+              <div key={cam.id} className="card-hover overflow-hidden">
+                <div className="relative h-40 bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
+                  <Camera className="h-12 w-12 text-slate-700" />
+                  <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                    {cam.status === "online" ? (
+                      <Wifi className="h-3.5 w-3.5 text-green-400" />
+                    ) : (
+                      <WifiOff className="h-3.5 w-3.5 text-slate-500" />
+                    )}
+                    <span
+                      className={clsx(
+                        "rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase",
+                        statusBadge[cam.status] ?? statusBadge.offline
+                      )}
+                    >
+                      {cam.status}
+                    </span>
+                  </div>
+                  {cam.status === "online" && (
+                    <div className="absolute top-3 right-3">
+                      <div className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+                    </div>
+                  )}
+                </div>
+                <div className="p-4">
+                  <h3 className="font-medium text-sm">{cam.name}</h3>
+                  <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
+                    <MapPin className="h-3 w-3" /> {cam.location}
+                  </div>
+                  <div className="mt-2 flex items-center gap-3 text-xs text-slate-500">
+                    <span>{cam.resolution || "—"}</span>
+                    <span>{cam.fps ? `${cam.fps} fps` : ""}</span>
+                  </div>
+                </div>
+              </div>
+            ))
           )}
         </div>
       )}
@@ -208,24 +213,26 @@ export default function CCTVPage() {
       {/* Known Faces */}
       {tab === "faces" && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {faces.data?.faces?.map((face) => (
-            <div key={face.id} className="card-hover p-4">
-              <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-slate-800 mx-auto">
-                <Eye className="h-7 w-7 text-slate-600" />
-              </div>
-              <div className="text-center">
-                <div className="font-medium text-sm">{face.label}</div>
-                <div className="mt-1 text-xs text-slate-500 capitalize">{face.category}</div>
-              </div>
-            </div>
-          )) ?? (
+          {faces.loading ? (
             <div className="col-span-full py-12 text-center text-slate-500">
-              {faces.loading ? (
-                <Loader2 className="h-5 w-5 animate-spin mx-auto" />
-              ) : (
-                "No known faces registered."
-              )}
+              <Loader2 className="h-5 w-5 animate-spin mx-auto" />
             </div>
+          ) : (faces.data ?? []).length === 0 ? (
+            <div className="col-span-full py-12 text-center text-slate-500">
+              No known faces registered.
+            </div>
+          ) : (
+            (faces.data ?? []).map((face) => (
+              <div key={face.id} className="card-hover p-4">
+                <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-slate-800 mx-auto">
+                  <Eye className="h-7 w-7 text-slate-600" />
+                </div>
+                <div className="text-center">
+                  <div className="font-medium text-sm">{face.label}</div>
+                  <div className="mt-1 text-xs text-slate-500 capitalize">{face.category}</div>
+                </div>
+              </div>
+            ))
           )}
         </div>
       )}

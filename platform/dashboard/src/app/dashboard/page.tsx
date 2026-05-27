@@ -5,15 +5,17 @@ import { useAuth } from "@/lib/auth";
 import { useApi } from "@/hooks/useApi";
 
 interface ThreatOverview {
-  total: number;
-  bySeverity: Record<string, number>;
-  byCategory: Record<string, number>;
-  recentEvents: number;
+  totalEvents: number;
+  criticalEvents: number;
+  openIncidents: number;
+  totalIocs: number;
+  eventsLast24h: number;
 }
 
 interface BillingSummary {
-  activePlan: { name: string } | null;
-  status: string | null;
+  currentPlan: { name: string } | null;
+  subscription: { status: string } | null;
+  totalSubscriptions: number;
 }
 
 export default function DashboardOverview() {
@@ -25,28 +27,28 @@ export default function DashboardOverview() {
     {
       icon: AlertTriangle,
       label: "Security Events",
-      value: threats.data?.total ?? "—",
+      value: threats.data?.totalEvents ?? "—",
       color: "text-red-400",
       bg: "bg-red-950/50",
     },
     {
       icon: Shield,
       label: "Critical Threats",
-      value: threats.data?.bySeverity?.critical ?? 0,
+      value: threats.data?.criticalEvents ?? 0,
       color: "text-orange-400",
       bg: "bg-orange-950/50",
     },
     {
       icon: Activity,
       label: "Recent (24h)",
-      value: threats.data?.recentEvents ?? "—",
+      value: threats.data?.eventsLast24h ?? "—",
       color: "text-yellow-400",
       bg: "bg-yellow-950/50",
     },
     {
       icon: TrendingUp,
       label: "Active Plan",
-      value: billing.data?.activePlan?.name ?? "None",
+      value: billing.data?.currentPlan?.name ?? "None",
       color: "text-brand-400",
       bg: "bg-brand-950/50",
     },
@@ -80,29 +82,26 @@ export default function DashboardOverview() {
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <div className="card p-6">
           <h2 className="text-lg font-semibold mb-4">Severity Breakdown</h2>
-          {threats.data?.bySeverity ? (
+          {threats.data && threats.data.totalEvents > 0 ? (
             <div className="space-y-3">
-              {Object.entries(threats.data.bySeverity).map(([sev, count]) => (
+              {[
+                { sev: "critical", count: threats.data.criticalEvents, color: "bg-red-500" },
+                { sev: "open incidents", count: threats.data.openIncidents, color: "bg-orange-500" },
+                { sev: "last 24h", count: threats.data.eventsLast24h, color: "bg-yellow-500" },
+                { sev: "total IOCs", count: threats.data.totalIocs, color: "bg-green-500" },
+              ].map(({ sev, count, color }) => (
                 <div key={sev} className="flex items-center justify-between">
                   <span className="text-sm text-slate-400 capitalize">{sev}</span>
                   <div className="flex items-center gap-3">
                     <div className="h-2 w-32 rounded-full bg-slate-800 overflow-hidden">
                       <div
-                        className={`h-full rounded-full ${
-                          sev === "critical"
-                            ? "bg-red-500"
-                            : sev === "high"
-                            ? "bg-orange-500"
-                            : sev === "medium"
-                            ? "bg-yellow-500"
-                            : "bg-green-500"
-                        }`}
+                        className={`h-full rounded-full ${color}`}
                         style={{
-                          width: `${Math.min(100, ((count as number) / Math.max(threats.data?.total ?? 1, 1)) * 100)}%`,
+                          width: `${Math.min(100, (count / Math.max(threats.data.totalEvents, 1)) * 100)}%`,
                         }}
                       />
                     </div>
-                    <span className="text-sm font-medium w-8 text-right">{count as number}</span>
+                    <span className="text-sm font-medium w-8 text-right">{count}</span>
                   </div>
                 </div>
               ))}

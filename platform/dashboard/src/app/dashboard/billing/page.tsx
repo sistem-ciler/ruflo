@@ -27,9 +27,9 @@ interface Subscription {
 }
 
 interface BillingSummary {
-  activePlan: Plan | null;
+  currentPlan: Plan | null;
   subscription: Subscription | null;
-  status: string | null;
+  totalSubscriptions: number;
 }
 
 function formatFeature(f: string): string {
@@ -87,26 +87,26 @@ export default function BillingPage() {
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-4">Current Plan</h2>
         {billing.loading ? (
           <Loader2 className="h-5 w-5 animate-spin text-brand-500" />
-        ) : billing.data?.activePlan ? (
+        ) : billing.data?.currentPlan ? (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="text-xl font-bold flex items-center gap-2">
                 <Star className="h-5 w-5 text-brand-500" />
-                {billing.data.activePlan.name}
+                {billing.data.currentPlan.name}
                 <span className="text-xs font-normal text-slate-500 uppercase">
-                  ({billing.data.activePlan.product})
+                  ({billing.data.currentPlan.product})
                 </span>
               </div>
               <div className="mt-1 flex items-center gap-3 text-sm text-slate-400">
                 <span
                   className={clsx(
                     "rounded-full px-2 py-0.5 text-xs font-medium capitalize",
-                    billing.data.status === "active"
+                    billing.data.subscription?.status === "active"
                       ? "bg-green-500/10 text-green-400"
                       : "bg-red-500/10 text-red-400"
                   )}
                 >
-                  {billing.data.status}
+                  {billing.data.subscription?.status}
                 </span>
                 <span>{billing.data.subscription?.billingCycle}</span>
               </div>
@@ -137,7 +137,7 @@ export default function BillingPage() {
           </h2>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((plan, i) => {
-              const isActive = billing.data?.activePlan?.id === plan.id;
+              const isActive = billing.data?.currentPlan?.id === plan.id;
               return (
                 <div
                   key={plan.id}

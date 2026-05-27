@@ -45,10 +45,11 @@ interface IOC {
 }
 
 interface ThreatOverview {
-  total: number;
-  bySeverity: Record<string, number>;
-  byCategory: Record<string, number>;
-  recentEvents: number;
+  totalEvents: number;
+  criticalEvents: number;
+  openIncidents: number;
+  totalIocs: number;
+  eventsLast24h: number;
 }
 
 const severityColor: Record<string, string> = {
@@ -144,10 +145,10 @@ export default function SecurityPage() {
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-4 mb-8">
         {[
-          { label: "Total Events", value: threats.data?.total ?? 0, color: "text-brand-400" },
-          { label: "Critical", value: threats.data?.bySeverity?.critical ?? 0, color: "text-red-400" },
-          { label: "High", value: threats.data?.bySeverity?.high ?? 0, color: "text-orange-400" },
-          { label: "Recent (24h)", value: threats.data?.recentEvents ?? 0, color: "text-yellow-400" },
+          { label: "Total Events", value: threats.data?.totalEvents ?? 0, color: "text-brand-400" },
+          { label: "Critical", value: threats.data?.criticalEvents ?? 0, color: "text-red-400" },
+          { label: "Open Incidents", value: threats.data?.openIncidents ?? 0, color: "text-orange-400" },
+          { label: "Recent (24h)", value: threats.data?.eventsLast24h ?? 0, color: "text-yellow-400" },
         ].map((s) => (
           <div key={s.label} className="card p-4">
             <div className="text-xs text-slate-500">{s.label}</div>
