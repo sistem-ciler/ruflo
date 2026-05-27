@@ -11,6 +11,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [tenantSlug, setTenantSlug] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -19,7 +20,7 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      await login(email, password);
+      await login(email, password, tenantSlug);
       router.push("/dashboard");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
@@ -46,6 +47,18 @@ export default function LoginPage() {
               {error}
             </div>
           )}
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1.5">Organization Slug</label>
+            <input
+              type="text"
+              required
+              value={tenantSlug}
+              onChange={(e) => setTenantSlug(e.target.value)}
+              className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+              placeholder="acme-security-corp"
+            />
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1.5">Email</label>

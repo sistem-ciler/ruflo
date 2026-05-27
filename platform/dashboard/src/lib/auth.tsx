@@ -9,6 +9,7 @@ interface User {
   name: string;
   role: string;
   tenantId: string;
+  tenantSlug?: string;
 }
 
 interface AuthState {
@@ -18,7 +19,7 @@ interface AuthState {
 }
 
 interface AuthCtx extends AuthState {
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, tenantSlug: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
 }
@@ -57,20 +58,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const res = await api.post<AuthResponse>("/api/v1/auth/login", { email, password });
+  const login = useCallback(async (email: string, password: string, tenantSlug: string) => {
+    const res = await api.post<AuthResponse>("/api/v1/auth/login", { email, password, tenantSlug });
     const { accessToken, user } = res.data;
+    const enriched = { ...user, tenantSlug };
     localStorage.setItem("csaas_token", accessToken);
-    localStorage.setItem("csaas_user", JSON.stringify(user));
-    setState({ token: accessToken, user, loading: false });
+    localStorage.setItem("csaas_user", JSON.stringify(enriched));
+    setState({ token: accessToken, user: enriched, loading: false });
   }, []);
 
   const register = useCallback(async (data: RegisterData) => {
     const res = await api.post<AuthResponse>("/api/v1/auth/register", data);
     const { accessToken, user } = res.data;
+    const enriched = { ...user, tenantSlug: data.tenantSlug };
     localStorage.setItem("csaas_token", accessToken);
-    localStorage.setItem("csaas_user", JSON.stringify(user));
-    setState({ token: accessToken, user, loading: false });
+    localStorage.setItem("csaas_user", JSON.stringify(enriched));
+    setState({ token: accessToken, user: enriched, loading: false });
   }, []);
 
   const logout = useCallback(() => {
