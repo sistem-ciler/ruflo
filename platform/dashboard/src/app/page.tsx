@@ -11,6 +11,7 @@ import {
   Server,
   ArrowRight,
   Check,
+  Crosshair,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 
@@ -64,6 +65,12 @@ const features = [
       "Tenant-scoped user CRUD with safe projections, password management, and permission controls.",
   },
   {
+    icon: Crosshair,
+    title: "Rent a Hacker",
+    description:
+      "On-demand penetration testing powered by autonomous AI agents. Web apps, APIs, networks, and cloud infrastructure.",
+  },
+  {
     icon: Server,
     title: "Event-Driven Architecture",
     description:
@@ -107,6 +114,7 @@ export default async function LandingPage() {
 
   const cctvPlans = plans.filter((p) => p.product === "cctv");
   const cyberPlans = plans.filter((p) => p.product === "cybersecurity");
+  const pentestPlans = plans.filter((p) => p.product === "pentest");
   const bundlePlans = plans.filter((p) => p.product === "bundle");
 
   return (
@@ -149,7 +157,7 @@ export default async function LandingPage() {
               ["99.9%", "Uptime SLA"],
               ["< 100ms", "Event Ingestion"],
               ["17+", "Database Tables"],
-              ["14+", "API Endpoints"],
+              ["30+", "API Endpoints"],
             ].map(([value, label]) => (
               <div key={label}>
                 <div className="text-2xl font-bold text-white">{value}</div>
@@ -218,13 +226,14 @@ export default async function LandingPage() {
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold sm:text-4xl">Simple, Transparent Pricing</h2>
             <p className="mt-4 text-lg text-slate-400">
-              Choose CCTV, Cybersecurity, or bundle both. All plans include a 14-day free trial.
+              Choose CCTV, Cybersecurity, Rent a Hacker, or bundle them all. 14-day free trial included.
             </p>
           </div>
 
           {[
             { title: "CCTV Plans", items: cctvPlans },
             { title: "Cybersecurity Plans", items: cyberPlans },
+            { title: "Rent a Hacker Plans", items: pentestPlans },
             { title: "Bundle Plans", items: bundlePlans },
           ].map(
             (group) =>

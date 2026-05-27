@@ -1,6 +1,6 @@
 "use client";
 
-import { Shield, Camera, AlertTriangle, Users, Activity, TrendingUp } from "lucide-react";
+import { Shield, Camera, AlertTriangle, Users, Activity, TrendingUp, Crosshair } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/hooks/useApi";
 
@@ -18,10 +18,19 @@ interface BillingSummary {
   totalSubscriptions: number;
 }
 
+interface PentestSummary {
+  totalEngagements: number;
+  activeEngagements: number;
+  totalFindings: number;
+  criticalFindings: number;
+  completedEngagements: number;
+}
+
 export default function DashboardOverview() {
   const { user } = useAuth();
   const threats = useApi<ThreatOverview>("/api/v1/security/threats");
   const billing = useApi<BillingSummary>("/api/v1/billing/summary");
+  const pentest = useApi<PentestSummary>("/api/v1/pentest/summary");
 
   const stats = [
     {
@@ -46,6 +55,13 @@ export default function DashboardOverview() {
       bg: "bg-yellow-950/50",
     },
     {
+      icon: Crosshair,
+      label: "Pentest Engagements",
+      value: pentest.data?.totalEngagements ?? 0,
+      color: "text-purple-400",
+      bg: "bg-purple-950/50",
+    },
+    {
       icon: TrendingUp,
       label: "Active Plan",
       value: billing.data?.currentPlan?.name ?? "None",
@@ -63,7 +79,7 @@ export default function DashboardOverview() {
         </p>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
         {stats.map((s) => (
           <div key={s.label} className="card p-5">
             <div className="flex items-center gap-3">
@@ -84,27 +100,30 @@ export default function DashboardOverview() {
           <h2 className="text-lg font-semibold mb-4">Severity Breakdown</h2>
           {threats.data && threats.data.totalEvents > 0 ? (
             <div className="space-y-3">
-              {[
-                { sev: "critical", count: threats.data.criticalEvents, color: "bg-red-500" },
-                { sev: "open incidents", count: threats.data.openIncidents, color: "bg-orange-500" },
-                { sev: "last 24h", count: threats.data.eventsLast24h, color: "bg-yellow-500" },
-                { sev: "total IOCs", count: threats.data.totalIocs, color: "bg-green-500" },
-              ].map(({ sev, count, color }) => (
-                <div key={sev} className="flex items-center justify-between">
-                  <span className="text-sm text-slate-400 capitalize">{sev}</span>
-                  <div className="flex items-center gap-3">
-                    <div className="h-2 w-32 rounded-full bg-slate-800 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${color}`}
-                        style={{
-                          width: `${Math.min(100, (count / Math.max(threats.data.totalEvents, 1)) * 100)}%`,
-                        }}
-                      />
+              {(() => {
+                const td = threats.data;
+                return [
+                  { sev: "critical", count: td.criticalEvents, color: "bg-red-500" },
+                  { sev: "open incidents", count: td.openIncidents, color: "bg-orange-500" },
+                  { sev: "last 24h", count: td.eventsLast24h, color: "bg-yellow-500" },
+                  { sev: "total IOCs", count: td.totalIocs, color: "bg-green-500" },
+                ].map(({ sev, count, color }) => (
+                  <div key={sev} className="flex items-center justify-between">
+                    <span className="text-sm text-slate-400 capitalize">{sev}</span>
+                    <div className="flex items-center gap-3">
+                      <div className="h-2 w-32 rounded-full bg-slate-800 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${color}`}
+                          style={{
+                            width: `${Math.min(100, (count / Math.max(td.totalEvents, 1)) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                      <span className="text-sm font-medium w-8 text-right">{count}</span>
                     </div>
-                    <span className="text-sm font-medium w-8 text-right">{count}</span>
                   </div>
-                </div>
-              ))}
+                ));
+              })()}
             </div>
           ) : (
             <p className="text-sm text-slate-500">No data yet. Ingest security events to see statistics.</p>
@@ -117,6 +136,7 @@ export default function DashboardOverview() {
             {[
               { icon: AlertTriangle, label: "View Security Events", href: "/dashboard/security" },
               { icon: Camera, label: "Manage CCTV Cameras", href: "/dashboard/cctv" },
+              { icon: Crosshair, label: "Rent a Hacker", href: "/dashboard/pentest" },
               { icon: Users, label: "Manage Users", href: "/dashboard/users" },
             ].map((action) => (
               <a

@@ -187,6 +187,41 @@ export const iocs = pgTable("iocs", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// ─── Pentest Engagements (Rent a Hacker) ────────────────────
+
+export const pentestEngagements = pgTable("pentest_engagements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  name: varchar("name", { length: 255 }).notNull(),
+  targetType: varchar("target_type", { length: 50 }).notNull(),
+  targetValue: text("target_value").notNull(),
+  scope: text("scope"),
+  status: varchar("status", { length: 30 }).default("draft").notNull(),
+  assignedTeam: varchar("assigned_team", { length: 100 }),
+  scheduledStart: timestamp("scheduled_start", { withTimezone: true }),
+  scheduledEnd: timestamp("scheduled_end", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  report: jsonb("report"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const pentestFindings = pgTable("pentest_findings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull(),
+  engagementId: uuid("engagement_id").notNull().references(() => pentestEngagements.id),
+  title: varchar("title", { length: 255 }).notNull(),
+  severity: varchar("severity", { length: 20 }).notNull(),
+  category: varchar("category", { length: 100 }),
+  description: text("description"),
+  stepsToReproduce: text("steps_to_reproduce"),
+  recommendation: text("recommendation"),
+  cveIds: jsonb("cve_ids").default([]),
+  evidence: jsonb("evidence").default([]),
+  status: varchar("status", { length: 30 }).default("open").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ─── Audit Log ──────────────────────────────────────────────
 
 export const auditLog = pgTable("audit_log", {

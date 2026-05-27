@@ -20,6 +20,7 @@ import { anywareRouter } from "./anyware-ai/router.js";
 import { securityRouter } from "./security/router.js";
 import { billingRouter } from "./billing/router.js";
 import { usersRouter } from "./users/router.js";
+import { pentestRouter } from "./pentest/router.js";
 
 // BigInt JSON serialization (PostgreSQL bigserial returns BigInt)
 (BigInt.prototype as unknown as { toJSON: () => string }).toJSON = function () {
@@ -126,6 +127,7 @@ app.use("/api/v1/anyware", anywareRouter);
 app.use("/api/v1/security", securityRouter);
 app.use("/api/v1/billing", billingRouter);
 app.use("/api/v1/users", usersRouter);
+app.use("/api/v1/pentest", pentestRouter);
 
 // ─── 404 handler ────────────────────────────────────────────
 

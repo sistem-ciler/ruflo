@@ -175,6 +175,43 @@ CREATE TABLE IF NOT EXISTS iocs (
 );
 CREATE INDEX idx_iocs_type_value ON iocs(ioc_type, value);
 
+-- ─── Pentest / Rent a Hacker Tables ─────────────────────────
+
+CREATE TABLE IF NOT EXISTS pentest_engagements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    target_type VARCHAR(50) NOT NULL,
+    target_value TEXT NOT NULL,
+    scope TEXT,
+    status VARCHAR(30) NOT NULL DEFAULT 'draft',
+    assigned_team VARCHAR(100),
+    scheduled_start TIMESTAMPTZ,
+    scheduled_end TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    report JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_pentest_engagements_tenant ON pentest_engagements(tenant_id, status);
+
+CREATE TABLE IF NOT EXISTS pentest_findings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    engagement_id UUID NOT NULL REFERENCES pentest_engagements(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    severity VARCHAR(20) NOT NULL,
+    category VARCHAR(100),
+    description TEXT,
+    steps_to_reproduce TEXT,
+    recommendation TEXT,
+    cve_ids JSONB DEFAULT '[]',
+    evidence JSONB DEFAULT '[]',
+    status VARCHAR(30) NOT NULL DEFAULT 'open',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_pentest_findings_engagement ON pentest_findings(engagement_id, severity);
+
 -- ─── Audit & Agent Logs ─────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -215,6 +252,8 @@ ALTER TABLE known_faces ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cua_sandboxes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE security_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE incidents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pentest_engagements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pentest_findings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
 
 -- ─── Seed Plans ─────────────────────────────────────────────
@@ -249,5 +288,15 @@ INSERT INTO plans (name, product, price_monthly, price_yearly, limits, features)
  '["live_monitoring", "advanced_alerts", "face_recognition", "anyware_ai_analytics", "cua_operator", "advanced_siem", "anomaly_detection", "auto_response"]'),
 ('Bundle Enterprise', 'bundle', 699.00, 6990.00,
  '{"cameras": -1, "users": -1, "cua_agents": -1, "retention_days": 90}',
- '["all"]')
+ '["all"]'),
+-- Pentest / Rent a Hacker plans
+('Starter', 'pentest', 199.00, 1990.00,
+ '{"engagements_per_month": 1, "concurrent_tests": 1, "report_retention_days": 30}',
+ '["web_app_testing", "basic_report", "email_support"]'),
+('Professional', 'pentest', 499.00, 4990.00,
+ '{"engagements_per_month": 5, "concurrent_tests": 3, "report_retention_days": 90}',
+ '["web_app_testing", "network_testing", "api_testing", "detailed_report", "remediation_guidance", "priority_support"]'),
+('Enterprise', 'pentest', 1499.00, 14990.00,
+ '{"engagements_per_month": -1, "concurrent_tests": -1, "report_retention_days": 365}',
+ '["web_app_testing", "network_testing", "api_testing", "cloud_testing", "social_engineering", "red_team", "executive_report", "remediation_verification", "dedicated_team", "sla_24h"]')
 ON CONFLICT DO NOTHING;

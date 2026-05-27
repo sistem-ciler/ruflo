@@ -9,6 +9,7 @@ import {
   Camera,
   CreditCard,
   Users,
+  Crosshair,
   LogOut,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -19,6 +20,7 @@ const nav = [
   { href: "/dashboard/security", icon: AlertTriangle, label: "Security" },
   { href: "/dashboard/cctv", icon: Camera, label: "CCTV" },
   { href: "/dashboard/billing", icon: CreditCard, label: "Billing" },
+  { href: "/dashboard/pentest", icon: Crosshair, label: "Rent a Hacker" },
   { href: "/dashboard/users", icon: Users, label: "Users" },
 ];
 
