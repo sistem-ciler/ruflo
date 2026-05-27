@@ -14,12 +14,12 @@
 
 <Modal closeOnBackdrop={false} onclose={close} width="!max-w-[420px] !m-4">
 	<div
-		class="flex w-full flex-col gap-8 bg-white bg-gradient-to-b to-transparent px-6 pb-7 dark:bg-black dark:from-white/10 dark:to-white/5"
+		class="flex w-full flex-col gap-8 bg-white bg-gradient-to-b to-transparent px-6 pb-7 dark:bg-gray-900 dark:from-godoman-green/5 dark:to-godoman-purple/5"
 	>
 		<div class="relative -mx-6 h-48 select-none overflow-hidden">
 			<RuFloUniverse width={420} height={192} />
 			<div
-				class="absolute bottom-3 right-3 rounded-lg border border-indigo-500/30 bg-indigo-500/20 px-2 py-0.5 text-sm font-semibold text-indigo-400"
+				class="absolute bottom-3 right-3 rounded-lg border border-godoman-green/30 bg-godoman-green/20 px-2 py-0.5 text-sm font-semibold text-godoman-green"
 			>
 				MCP Tools
 			</div>
@@ -37,7 +37,7 @@
 		</div>
 
 		<button
-			class="k w-full rounded-xl bg-indigo-600 px-5 py-2.5 text-base font-medium text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600"
+			class="k w-full rounded-xl bg-godoman-purple px-5 py-2.5 text-base font-medium text-white hover:bg-godoman-purple/90 dark:bg-godoman-purple dark:hover:bg-godoman-purple/80"
 			onclick={close}
 		>
 			Start chatting

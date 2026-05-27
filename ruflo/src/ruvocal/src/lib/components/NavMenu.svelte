@@ -295,15 +295,15 @@
 		border-radius: 50%;
 	}
 	.qd1 {
-		background: #3b82f6;
+		background: #00d084;
 		animation: qdot 2.2s ease-in-out infinite;
 	}
 	.qd2 {
-		background: #818cf8;
+		background: #9b51e0;
 		animation: qdot 2.2s ease-in-out infinite 0.35s;
 	}
 	.qd3 {
-		background: #06b6d4;
+		background: #227ec5;
 		animation: qdot 2.2s ease-in-out infinite 0.7s;
 	}
 	@keyframes qdot {
