@@ -19,6 +19,7 @@
 
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { createRequire } from 'node:module';
 
 // ===== Lazy singleton =====
 
@@ -28,18 +29,40 @@ let bridgeAvailable: boolean | null = null;
 
 /**
  * Resolve database path with path traversal protection.
- * Only allows paths within or below the project's .swarm directory,
+ * Only allows paths within or below the project's working directory,
  * or the special ':memory:' path.
+ *
+ * #1945: the previous hard-coded `<cwd>/.swarm/memory.db` default ignored
+ * `CLAUDE_FLOW_MEMORY_PATH` / `claude-flow.config.json#memory.persistPath`
+ * — so users with non-default memory paths had `memory init` write to e.g.
+ * `data/memory/memory.db` while `bridgeStoreEntry()` wrote to
+ * `.swarm/memory.db`. CLI store reported success against the wrong file and
+ * a fresh process reading the configured path saw nothing.
+ *
+ * Use `getMemoryRoot()` (from memory-initializer) so the bridge and the
+ * initializer agree on the same file. Imported via require() to avoid a
+ * circular ESM dep between memory-initializer.ts and memory-bridge.ts.
  */
 function getDbPath(customPath?: string): string {
-  const swarmDir = path.resolve(process.cwd(), '.swarm');
-  if (!customPath) return path.join(swarmDir, 'memory.db');
+  let defaultDir = path.resolve(process.cwd(), '.swarm');
+  try {
+    // `getMemoryRoot()` honors $CLAUDE_FLOW_MEMORY_PATH, then the
+    // claude-flow.config.json `memory.persistPath`, then defaults to `.swarm`.
+    const cjsRequire = createRequire(import.meta.url);
+    const mod = cjsRequire('./memory-initializer.js') as { getMemoryRoot?: () => string };
+    if (typeof mod.getMemoryRoot === 'function') {
+      defaultDir = mod.getMemoryRoot();
+    }
+  } catch {
+    /* memory-initializer not resolvable in this build — keep `.swarm/` default */
+  }
+  if (!customPath) return path.join(defaultDir, 'memory.db');
   if (customPath === ':memory:') return ':memory:';
   const resolved = path.resolve(customPath);
-  // Ensure the path doesn't escape the working directory
+  // Ensure the path doesn't escape the working directory.
   const cwd = process.cwd();
   if (!resolved.startsWith(cwd)) {
-    return path.join(swarmDir, 'memory.db'); // fallback to safe default
+    return path.join(defaultDir, 'memory.db'); // fallback to safe default
   }
   return resolved;
 }
@@ -585,6 +608,17 @@ export async function bridgeStoreEntry(options: {
           tags, metadata, created_at, updated_at, expires_at, status
         ) VALUES (?, ?, ?, ?, 'semantic', ?, ?, ?, ?, ?, ?, ?, ?, 'active')`;
 
+    // #1941: provision a `vector_indexes` row for this namespace before the
+    // entry insert. AgentDB's HNSW/router keys lookups by namespace via this
+    // table — if it has no row for e.g. `claude-memories`, `memory_search`
+    // returns 0 results even when memory_entries holds hundreds of rows for
+    // that namespace. INSERT OR IGNORE so existing index rows are preserved.
+    try {
+      ctx.db
+        .prepare(`INSERT OR IGNORE INTO vector_indexes (id, name, dimensions) VALUES (?, ?, ?)`)
+        .run(namespace, namespace, dimensions || 384);
+    } catch { /* vector_indexes may not exist on legacy DBs — fall through */ }
+
     const stmt = ctx.db.prepare(insertSql);
     stmt.run(
       id, key, namespace, value,
@@ -757,6 +791,8 @@ export async function bridgeListEntries(options: {
   limit?: number;
   offset?: number;
   dbPath?: string;
+  /** #2073: When true, include the entry's full `content` string in each result. */
+  includeContent?: boolean;
 }): Promise<{
   success: boolean;
   entries: {
@@ -768,6 +804,8 @@ export async function bridgeListEntries(options: {
     createdAt: string;
     updatedAt: string;
     hasEmbedding: boolean;
+    /** #2073: Present when `includeContent: true` was requested. */
+    content?: string;
   }[];
   total: number;
   error?: string;
@@ -784,11 +822,21 @@ export async function bridgeListEntries(options: {
     const nsFilter = namespace ? `AND namespace = ?` : '';
     const nsParams = namespace ? [namespace] : [];
 
+    // #2120 — `status IS NULL` accepted alongside `'active'`. Old
+    // databases imported by the auto-memory bridge (before the status
+    // column existed) end up with NULL status after schema migration if
+    // the migration ran on an existing DB without a backfill. Reporter
+    // @alexandrelealbess on WSL2 had 251 entries with NULL status, so
+    // the `status = 'active'` filter matched zero. Treat NULL as
+    // "legacy-active" — the safe default for any entry that predates the
+    // status column.
+    const statusFilter = `(status = 'active' OR status IS NULL)`;
+
     // Count
     let total = 0;
     try {
       const countStmt = ctx.db.prepare(
-        `SELECT COUNT(*) as cnt FROM memory_entries WHERE status = 'active' ${nsFilter}`
+        `SELECT COUNT(*) as cnt FROM memory_entries WHERE ${statusFilter} ${nsFilter}`
       );
       const countRow = countStmt.get(...nsParams);
       total = countRow?.cnt ?? 0;
@@ -802,14 +850,16 @@ export async function bridgeListEntries(options: {
       const stmt = ctx.db.prepare(`
         SELECT id, key, namespace, content, embedding, access_count, created_at, updated_at
         FROM memory_entries
-        WHERE status = 'active' ${nsFilter}
+        WHERE ${statusFilter} ${nsFilter}
         ORDER BY updated_at DESC
         LIMIT ? OFFSET ?
       `);
       const rows = stmt.all(...nsParams, limit, offset);
       for (const row of rows) {
-        entries.push({
-          id: String(row.id).substring(0, 20),
+        const entry: Record<string, unknown> = {
+          // #2073: don't truncate id when content is requested — callers
+          // (notably memory_export) need the full id to round-trip via import.
+          id: options.includeContent ? String(row.id) : String(row.id).substring(0, 20),
           key: row.key || String(row.id).substring(0, 15),
           namespace: row.namespace || 'default',
           size: (row.content || '').length,
@@ -817,7 +867,11 @@ export async function bridgeListEntries(options: {
           createdAt: row.created_at || new Date().toISOString(),
           updatedAt: row.updated_at || new Date().toISOString(),
           hasEmbedding: !!(row.embedding && String(row.embedding).length > 10),
-        });
+        };
+        if (options.includeContent) {
+          entry.content = row.content || '';
+        }
+        entries.push(entry);
       }
     } catch {
       return null;

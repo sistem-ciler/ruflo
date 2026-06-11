@@ -49,8 +49,12 @@ services:
       MCP_GROUP_CLAUDE_CODE: ${MCP_GROUP_CLAUDE_CODE:-false}
       MCP_GROUP_GEMINI: ${MCP_GROUP_GEMINI:-false}
       MCP_GROUP_CODEX: ${MCP_GROUP_CODEX:-false}
+      MCP_GROUP_VM: ${MCP_GROUP_VM:-true}
+      VM_ENGINE_URL: http://vm-engine:4000
       # API keys for optional groups
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    depends_on:
+      - vm-engine
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health').then(r => process.exit(r.ok ? 0 : 1))"]
       interval: 30s
@@ -100,12 +104,40 @@ services:
         OPENAI_API_KEY=${OPENROUTER_API_KEY:-sk-placeholder}
         MODELS=[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","description":"Anthropic latest fast and capable model."},{"id":"anthropic/claude-sonnet-4","displayName":"Claude Sonnet 4","description":"Advanced reasoning and coding from Anthropic."},{"id":"anthropic/claude-opus-4.7","displayName":"Claude Opus 4.7","description":"Most powerful Claude model for complex tasks."},{"id":"anthropic/claude-3.5-haiku","displayName":"Claude 3.5 Haiku","description":"Fast lightweight Claude model."},{"id":"google/gemini-2.5-pro-preview","displayName":"Gemini 2.5 Pro","description":"Google most capable model with deep thinking."},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash","description":"Fast and efficient Gemini model."},{"id":"openai/gpt-4.1","displayName":"GPT-4.1","description":"OpenAI latest GPT with improved reasoning."},{"id":"openai/gpt-4o","displayName":"GPT-4o","description":"OpenAI multimodal flagship model."},{"id":"openai/gpt-4o-mini","displayName":"GPT-4o Mini","description":"Fast and affordable OpenAI model."},{"id":"openai/o3-mini","displayName":"o3-mini","description":"OpenAI reasoning model for STEM."},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","description":"Meta latest open model with strong performance."},{"id":"deepseek/deepseek-r1","displayName":"DeepSeek R1","description":"Advanced reasoning with chain-of-thought."}]
         TASK_MODEL=anthropic/claude-3.5-haiku
-        MCP_SERVERS=[{"name":"Core Tools","url":"http://mcp-bridge:3001/mcp/core"},{"name":"Intelligence & Learning","url":"http://mcp-bridge:3001/mcp/intelligence"},{"name":"Agents & Orchestration","url":"http://mcp-bridge:3001/mcp/agents"},{"name":"Memory & Knowledge","url":"http://mcp-bridge:3001/mcp/memory"},{"name":"Dev Tools & Analysis","url":"http://mcp-bridge:3001/mcp/devtools"}]
+        MCP_SERVERS=[{"name":"Core Tools","url":"http://mcp-bridge:3001/mcp/core"},{"name":"Intelligence & Learning","url":"http://mcp-bridge:3001/mcp/intelligence"},{"name":"Agents & Orchestration","url":"http://mcp-bridge:3001/mcp/agents"},{"name":"Memory & Knowledge","url":"http://mcp-bridge:3001/mcp/memory"},{"name":"Dev Tools & Analysis","url":"http://mcp-bridge:3001/mcp/devtools"},{"name":"VM Lifecycle","url":"http://mcp-bridge:3001/mcp/vm"}]
         COOKIE_SECURE=${COOKIE_SECURE:-false}
         COOKIE_SAMESITE=${COOKIE_SAMESITE:-lax}
     depends_on:
       - mongodb
       - mcp-bridge
+
+  # --- VM Lifecycle Engine (Hetzner autonomous scaling) ---
+  vm-engine:
+    build:
+      context: ./src/vm-engine
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    expose:
+      - "4000"
+    environment:
+      PORT: "4000"
+      NODE_ENV: ${NODE_ENV:-development}
+      HETZNER_API_TOKEN: ${HETZNER_API_TOKEN:-}
+      HETZNER_DATACENTER: ${HETZNER_DATACENTER:-fsn1}
+      HETZNER_SERVER_TYPE: ${HETZNER_SERVER_TYPE:-cx22}
+      HETZNER_SSH_KEY_NAME: ${HETZNER_SSH_KEY_NAME:-}
+      HETZNER_PRIVATE_NETWORK_ID: ${HETZNER_PRIVATE_NETWORK_ID:-}
+      HETZNER_MAX_MONTHLY_EUR: ${HETZNER_MAX_MONTHLY_EUR:-50}
+      VM_QUEUE_DEPTH_THRESHOLD: ${VM_QUEUE_DEPTH_THRESHOLD:-10}
+      VM_COMPLEXITY_THRESHOLD: ${VM_COMPLEXITY_THRESHOLD:-0.70}
+      VM_SLA_BREACH_SECONDS: ${VM_SLA_BREACH_SECONDS:-300}
+      VM_WARM_POOL_SIZE: ${VM_WARM_POOL_SIZE:-0}
+      VM_IDLE_TIMEOUT_SECONDS: ${VM_IDLE_TIMEOUT_SECONDS:-600}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   mongo-data:

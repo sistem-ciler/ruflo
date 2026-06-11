@@ -46,8 +46,12 @@ function costForUsage(tier, usage) {
 }
 
 function encodeProjectPath(cwd) {
-  // Claude Code encodes absolute path by replacing `/` with `-`.
-  return cwd.replace(/\//g, '-');
+  // #1927: Claude Code encodes an absolute path by replacing path separators
+  // AND the Windows drive colon with `-`. So:
+  //   POSIX:   /home/user/proj      -> -home-user-proj
+  //   Windows: D:\project\Subcloudy -> D--project-Subcloudy   (`:` -> `-`, `\` -> `-`)
+  // The old code only replaced `/`, a no-op on Windows paths.
+  return cwd.replace(/[/\\:]/g, '-');
 }
 
 function findProjectDir(cwd) {
@@ -128,7 +132,7 @@ function persistToMemory(summary) {
     '--namespace', ns,
     '--key', key,
     '--value', JSON.stringify(summary),
-  ], { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf-8' });
+  ], { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf-8', shell: process.platform === 'win32' });
   if (r.status !== 0) {
     return { ok: false, reason: r.stderr?.slice(0, 300) || `exit ${r.status}` };
   }

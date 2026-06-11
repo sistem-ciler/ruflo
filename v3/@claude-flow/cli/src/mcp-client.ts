@@ -42,8 +42,16 @@ import { agentdbTools } from './mcp-tools/agentdb-tools.js';
 // RuVector WASM tools
 import { ruvllmWasmTools } from './mcp-tools/ruvllm-tools.js';
 import { wasmAgentTools } from './mcp-tools/wasm-agent-tools.js';
+// ADR-115: Anthropic Claude Managed Agents — a cloud agent runtime alongside
+// the local WASM-sandboxed `wasm_agent_*` (rvagent) tools. Lives in the
+// `ruflo-agent` plugin.
+import { managedAgentTools } from './mcp-tools/managed-agent-tools.js';
 import { guidanceTools } from './mcp-tools/guidance-tools.js';
 import { autopilotTools } from './mcp-tools/autopilot-tools.js';
+// #1916: coverage-aware routing tools — defined in ruvector/coverage-tools.ts
+// but were never registered, so the `ruflo hooks coverage-*` CLI subcommands
+// failed with `Tool not found: hooks_coverage-route`.
+import { coverageRouterTools } from './ruvector/coverage-tools.js';
 
 // #1605: Only register browser tools if agent-browser is available
 let _browserAvailable: boolean | null = null;
@@ -114,10 +122,14 @@ registerTools([
   // RuVector WASM tools
   ...ruvllmWasmTools,
   ...wasmAgentTools,
+  // ADR-115: Anthropic Claude Managed Agents (cloud agent runtime)
+  ...managedAgentTools,
   // Guidance & discovery tools
   ...guidanceTools,
   // Autopilot persistent completion tools
   ...autopilotTools,
+  // #1916: coverage-aware routing (hooks_coverage-route / -suggest / -gaps)
+  ...coverageRouterTools,
 ]);
 
 /**

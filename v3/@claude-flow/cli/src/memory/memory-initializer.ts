@@ -73,6 +73,12 @@ export function _resetMemoryRootCache(): void {
 // ADR-053: Lazy import of AgentDB v3 bridge
 let _bridge: typeof import('./memory-bridge.js') | null | undefined;
 async function getBridge(): Promise<typeof import('./memory-bridge.js') | null> {
+  // #2120 — Allow callers to force the raw sql.js fallback path. The
+  // ensureSchemaColumns backfill (NULL → 'active') lives in that
+  // fallback, so smokes that verify legacy-DB migration semantics need a
+  // way to bypass the bridge. Also useful when the bridge would hang on
+  // network-bound init (Xenova model fetch) in offline CI.
+  if (process.env.CLAUDE_FLOW_DISABLE_BRIDGE === '1') return null;
   if (_bridge === null) return null;
   if (_bridge) return _bridge;
   try {
@@ -367,6 +373,36 @@ CREATE TABLE IF NOT EXISTS vector_indexes (
   created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
   updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000)
 );
+
+-- ============================================
+-- GRAPH EDGES (ADR-130 Phase 1)
+-- Unified knowledge graph backend — sql.js canonical store
+-- ============================================
+
+-- Unified graph edges table (ADR-130)
+-- Node IDs use domain-prefixed format: {domain}:{uuid}
+-- where domain in (mem, agent, task, entity, span, pattern)
+CREATE TABLE IF NOT EXISTS graph_edges (
+  id              TEXT PRIMARY KEY,          -- edge-{uuid}
+  source_id       TEXT NOT NULL,             -- domain-prefixed node ID
+  target_id       TEXT NOT NULL,             -- domain-prefixed node ID
+  relation        TEXT NOT NULL,             -- e.g. "caused", "depends-on", "imports"
+  weight          REAL DEFAULT 1.0,
+  -- Temporal / reliability semantics (ADR-130 §"graph that forgets" property)
+  confidence      REAL DEFAULT 1.0,          -- [0,1]; updated by JUDGE step
+  decay_rate      REAL DEFAULT 0.0,          -- per-day exponential decay applied at read time
+  last_reinforced TEXT,                      -- ISO-8601; set when CONSOLIDATE re-touches edge
+  witness_id      TEXT,                      -- FK to verification/witness-fixes.json (ADR-103)
+  -- Embedding storage: "inline:{base64}" | "vector_indexes:{id}" | NULL
+  embedding_ref   TEXT,
+  metadata        TEXT,                      -- JSON blob for plugin-specific fields
+  created_at      TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_graph_edges_source    ON graph_edges (source_id);
+CREATE INDEX IF NOT EXISTS idx_graph_edges_target    ON graph_edges (target_id);
+CREATE INDEX IF NOT EXISTS idx_graph_edges_relation  ON graph_edges (relation);
+CREATE INDEX IF NOT EXISTS idx_graph_edges_reinforced ON graph_edges (last_reinforced);
 
 -- ============================================
 -- SYSTEM METADATA
@@ -985,10 +1021,13 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES
   ('temporal_decay', 'enabled'),
   ('hnsw_indexing', 'enabled');
 
--- Create default vector index configuration
+-- Create default vector index configuration. Dimension matches the default
+-- ONNX embedding model (Xenova/all-MiniLM-L6-v2, 384-dim); HNSW rejects
+-- inserts whose dim does not match this row, so a 768 here breaks every
+-- memory_store --vector and memory_search on a fresh install (#1947).
 INSERT OR IGNORE INTO vector_indexes (id, name, dimensions) VALUES
-  ('default', 'default', 768),
-  ('patterns', 'patterns', 768);
+  ('default', 'default', 384),
+  ('patterns', 'patterns', 384);
 `;
 }
 
@@ -1078,6 +1117,23 @@ export async function ensureSchemaColumns(dbPath: string): Promise<{
         } catch (e) {
           // Column might already exist or other error - continue
         }
+      }
+    }
+
+    // #2120 — Belt-and-suspenders backfill. `ALTER TABLE ADD COLUMN
+    // status TEXT DEFAULT 'active'` should populate existing rows with
+    // 'active' in modern SQLite, but: (a) some auto-memory bridge writes
+    // happen via INSERT paths that pass an explicit NULL, (b) some
+    // historical sql.js builds skipped the DEFAULT backfill, (c)
+    // entries can be migrated in from older snapshots. After ensuring
+    // the column exists, force-backfill any remaining NULL → 'active'.
+    // Safe on already-correct DBs (0 rows updated).
+    if (columnsAdded.includes('status') || existingColumns.has('status')) {
+      try {
+        db.run(`UPDATE memory_entries SET status = 'active' WHERE status IS NULL`);
+        modified = true;
+      } catch {
+        /* table is read-only or doesn't exist — skip */
       }
     }
 
@@ -2191,6 +2247,18 @@ export async function storeEntry(options: {
       embeddingModel = embResult.model;
     }
 
+    // #1941: provision a `vector_indexes` row for this namespace before the
+    // entry insert. The HNSW lookup uses this table to find which namespaces
+    // are indexed — without a row, `memory_search({namespace:"X"})` returns
+    // 0 even when memory_entries holds matching rows. INSERT OR IGNORE
+    // preserves the existing `default` / `patterns` rows.
+    try {
+      db.run(
+        `INSERT OR IGNORE INTO vector_indexes (id, name, dimensions) VALUES (?, ?, ?)`,
+        [namespace, namespace, embeddingDimensions ?? 384]
+      );
+    } catch { /* vector_indexes may not exist on legacy DBs — fall through */ }
+
     // Insert or update entry (upsert mode uses REPLACE)
     const insertSql = upsert
       ? `INSERT OR REPLACE INTO memory_entries (
@@ -2475,6 +2543,8 @@ export async function listEntries(options: {
   limit?: number;
   offset?: number;
   dbPath?: string;
+  /** #2073: When true, include the entry's full `content` string in each result. */
+  includeContent?: boolean;
 }): Promise<{
   success: boolean;
   entries: {
@@ -2486,6 +2556,8 @@ export async function listEntries(options: {
     createdAt: string;
     updatedAt: string;
     hasEmbedding: boolean;
+    /** #2073: Present when `includeContent: true` was requested. */
+    content?: string;
   }[];
   total: number;
   error?: string;
@@ -2522,10 +2594,13 @@ export async function listEntries(options: {
     const fileBuffer = readFileMaybeEncrypted(dbPath, null);
     const db = new SQL.Database(fileBuffer);
 
+    // #2120 — accept `status IS NULL` alongside `'active'`. Old DBs
+    // that predate the status column may have NULL after migration.
+    // See memory-bridge.ts:bridgeListEntries for full context.
     // Get total count
     const countStmt = namespace
-      ? db.prepare(`SELECT COUNT(*) as cnt FROM memory_entries WHERE status = 'active' AND namespace = ?`)
-      : db.prepare(`SELECT COUNT(*) as cnt FROM memory_entries WHERE status = 'active'`);
+      ? db.prepare(`SELECT COUNT(*) as cnt FROM memory_entries WHERE (status = 'active' OR status IS NULL) AND namespace = ?`)
+      : db.prepare(`SELECT COUNT(*) as cnt FROM memory_entries WHERE (status = 'active' OR status IS NULL)`);
     if (namespace) {
       countStmt.bind([namespace]);
     }
@@ -2540,9 +2615,10 @@ export async function listEntries(options: {
     // Get entries
     const safeLimit = parseInt(String(limit), 10) || 100;
     const safeOffset = parseInt(String(offset), 10) || 0;
+    // #2120 — same NULL-as-active acceptance as the count above.
     const listStmt = namespace
-      ? db.prepare(`SELECT id, key, namespace, content, embedding, access_count, created_at, updated_at FROM memory_entries WHERE status = 'active' AND namespace = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?`)
-      : db.prepare(`SELECT id, key, namespace, content, embedding, access_count, created_at, updated_at FROM memory_entries WHERE status = 'active' ORDER BY updated_at DESC LIMIT ? OFFSET ?`);
+      ? db.prepare(`SELECT id, key, namespace, content, embedding, access_count, created_at, updated_at FROM memory_entries WHERE (status = 'active' OR status IS NULL) AND namespace = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?`)
+      : db.prepare(`SELECT id, key, namespace, content, embedding, access_count, created_at, updated_at FROM memory_entries WHERE (status = 'active' OR status IS NULL) ORDER BY updated_at DESC LIMIT ? OFFSET ?`);
     if (namespace) {
       listStmt.bind([namespace, safeLimit, safeOffset]);
     } else {
@@ -2563,6 +2639,7 @@ export async function listEntries(options: {
       createdAt: string;
       updatedAt: string;
       hasEmbedding: boolean;
+      content?: string;
     }[] = [];
 
     if (result[0]?.values) {
@@ -2570,8 +2647,20 @@ export async function listEntries(options: {
         const [id, key, ns, content, embedding, accessCount, createdAt, updatedAt] = row as [
           string, string, string, string, string | null, number, string, string
         ];
-        entries.push({
-          id: String(id).substring(0, 20),
+        const entry: {
+          id: string;
+          key: string;
+          namespace: string;
+          size: number;
+          accessCount: number;
+          createdAt: string;
+          updatedAt: string;
+          hasEmbedding: boolean;
+          content?: string;
+        } = {
+          // #2073: don't truncate id when content is requested — callers
+          // (notably memory_export) need the full id to round-trip via import.
+          id: options.includeContent ? String(id) : String(id).substring(0, 20),
           key: key || String(id).substring(0, 15),
           namespace: ns || 'default',
           size: (content || '').length,
@@ -2579,7 +2668,11 @@ export async function listEntries(options: {
           createdAt: createdAt || new Date().toISOString(),
           updatedAt: updatedAt || new Date().toISOString(),
           hasEmbedding: !!embedding && embedding.length > 10
-        });
+        };
+        if (options.includeContent) {
+          entry.content = content || '';
+        }
+        entries.push(entry);
       }
     }
 

@@ -153,13 +153,27 @@ async function checkDaemonStatus(): Promise<HealthCheck> {
 
 // Check memory database
 async function checkMemoryDatabase(): Promise<HealthCheck> {
-  const dbPaths = [
-    '.claude-flow/memory.db',
+  // Authoritative path comes from `getMemoryRoot()` (honors
+  // `CLAUDE_FLOW_MEMORY_PATH`, claude-flow.config.json's `memory.persistPath`,
+  // then defaults to `.swarm/`). #1946: the previous hard-coded list missed
+  // `data/memory/memory.db` (a common config) and ignored the env var
+  // entirely, so doctor reported "Not initialized" on perfectly-init'd DBs.
+  // Try the configured path first, then fall back to the historic candidates.
+  const candidates: string[] = [];
+  try {
+    const { getMemoryRoot } = await import('../memory/memory-initializer.js');
+    candidates.push(join(getMemoryRoot(), 'memory.db'));
+  } catch {
+    /* memory-initializer not available — fall through to legacy candidates */
+  }
+  candidates.push(
     '.swarm/memory.db',
-    'data/memory.db'
-  ];
+    '.claude-flow/memory.db',
+    'data/memory/memory.db', // matches `CLAUDE_FLOW_MEMORY_PATH=data/memory`
+    'data/memory.db',
+  );
 
-  for (const dbPath of dbPaths) {
+  for (const dbPath of candidates) {
     if (existsSync(dbPath)) {
       try {
         const stats = statSync(dbPath);
@@ -266,6 +280,52 @@ async function checkAIDefence(): Promise<HealthCheck> {
       status: 'warn',
       message: '@claude-flow/aidefence not loadable — aidefence_* MCP tools will fail (optional package)',
       fix: 'npm install --save @claude-flow/aidefence  (in your project), or run `claude-flow mcp start` from a directory that has it installed',
+    };
+  }
+}
+
+/**
+ * ADR-097 Phase 4: federation peer-state surface for doctor.
+ *
+ * Probes the federation plugin loadability + asserts the breaker entity
+ * layer is present in the installed version. Without the plugin
+ * installed this is a "not configured" pass — federation is opt-in.
+ *
+ * Live coordinator state (per-peer counts) requires a running MCP server
+ * with `federation_init` called; operators inspect that via the
+ * `federation_breaker_status` MCP tool, not the doctor (which is a
+ * one-shot CLI process with no coordinator session).
+ */
+async function checkFederationBreaker(): Promise<HealthCheck> {
+  try {
+    // Optional plugin — not a hard dep of @claude-flow/cli. Build the
+    // module specifier dynamically so TypeScript cannot statically
+    // resolve it (which would emit TS2307); at runtime the import
+    // either resolves (plugin installed) or throws (handled below).
+    const specifier = ['@claude-flow', 'plugin-agent-federation'].join('/');
+    const mod: { FederationNodeState?: unknown } = await import(specifier);
+    if (!mod.FederationNodeState) {
+      return {
+        name: 'Federation Breaker',
+        status: 'warn',
+        message:
+          '@claude-flow/plugin-agent-federation loaded but FederationNodeState export missing — version older than ADR-097 Phase 2',
+        fix: 'Upgrade: npm install @claude-flow/plugin-agent-federation@alpha',
+      };
+    }
+    return {
+      name: 'Federation Breaker',
+      status: 'pass',
+      message:
+        'ADR-097 breaker loadable — federation_breaker_status / federation_evict / federation_reactivate MCP tools available',
+    };
+  } catch {
+    return {
+      name: 'Federation Breaker',
+      status: 'pass',
+      message:
+        'Federation plugin not installed (optional) — install only if you need cross-installation peering',
+      fix: 'npm install --save @claude-flow/plugin-agent-federation@alpha',
     };
   }
 }
@@ -728,6 +788,7 @@ export const doctorCommand: Command = {
       checkBuildTools,
       checkAgenticFlow,
       checkEncryptionAtRest, // ADR-096 Phase 5
+      checkFederationBreaker, // ADR-097 Phase 4
     ];
 
     const componentMap: Record<string, () => Promise<HealthCheck>> = {
@@ -747,6 +808,7 @@ export const doctorCommand: Command = {
       'typescript': checkBuildTools,
       'agentic-flow': checkAgenticFlow,
       'encryption': checkEncryptionAtRest, // ADR-096 Phase 5
+      'federation': checkFederationBreaker, // ADR-097 Phase 4
     };
 
     let checksToRun = allChecks;

@@ -178,6 +178,19 @@ const retrieveCommand: Command = {
       description: 'Memory namespace',
       type: 'string',
       default: 'default'
+    },
+    // #2073: --format is the GLOBAL option (parser.ts:78) with choices
+    // ['text', 'json', 'table'] and default 'text'. The retrieve handler
+    // discriminates: 'json' emits parseable JSON, anything else (text/box/...)
+    // emits the human-readable box. No per-command override needed; we just
+    // document the behavior in the help text via examples.
+    {
+      // #2073: --value-only emits ONLY the value string (no wrapper).
+      // Designed for piping into JSON.parse without any cleanup.
+      name: 'value-only',
+      description: 'Print only the stored value to stdout (no wrapper)',
+      type: 'boolean',
+      default: false
     }
   ],
   action: async (ctx: CommandContext): Promise<CommandResult> => {
@@ -205,6 +218,17 @@ const retrieveCommand: Command = {
       }
 
       const entry = result.entry;
+
+      // #2073: --value-only emits just the raw value (no decoration) for
+      // piping into JSON.parse / jq / other downstream parsers without
+      // any cleanup.
+      if (ctx.flags['value-only'] || ctx.flags.valueOnly) {
+        // Use process.stdout.write directly to bypass any printer-side
+        // transformation of quotes/structural characters.
+        process.stdout.write(entry.content);
+        if (process.stdout.isTTY) process.stdout.write('\n');
+        return { success: true, data: entry };
+      }
 
       if (ctx.flags.format === 'json') {
         output.printJson(entry);
@@ -660,6 +684,7 @@ const statsCommand: Command = {
     try {
       const statsResult = await callMCPTool('memory_stats', {}) as {
         totalEntries: number;
+        entriesWithEmbeddings?: number;
         totalSize: string;
         version: string;
         backend: string;
@@ -768,11 +793,23 @@ const statsCommand: Command = {
             },
             {
               metric: 'HNSW Index',
-              value: hnsw.available && hnsw.initialized
-                ? output.success(`active (${hnsw.entryCount.toLocaleString()} entries)`)
-                : hnsw.available
-                  ? output.warning('available but not initialized')
-                  : output.dim('not active'),
+              // ruflo#1989 / #1987: `hnsw.entryCount` is in-process JS state
+              // (the live HNSW index of the current Node process). A fresh
+              // `memory stats` invocation has never indexed anything, so it
+              // reports 0 even when the persistent DB has thousands of
+              // entries with embeddings. Use the persistent count from the
+              // MCP tool (`entriesWithEmbeddings`, which is the actual
+              // count of rows that have a vector) as the source of truth.
+              value: (() => {
+                const persisted = typeof statsResult.entriesWithEmbeddings === 'number'
+                  ? statsResult.entriesWithEmbeddings
+                  : null;
+                const live = hnsw.entryCount || 0;
+                const total = persisted !== null ? Math.max(persisted, live) : live;
+                if (!hnsw.available) return output.dim('not active');
+                if (total === 0) return output.warning('available but not initialized');
+                return output.success(`active (${total.toLocaleString()} entries)`);
+              })(),
             },
           ]
         });
