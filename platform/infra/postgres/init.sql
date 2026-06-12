@@ -212,6 +212,23 @@ CREATE TABLE IF NOT EXISTS pentest_findings (
 );
 CREATE INDEX idx_pentest_findings_engagement ON pentest_findings(engagement_id, severity);
 
+-- Autonomous agent action stream (Decepticon kill-chain)
+CREATE TABLE IF NOT EXISTS pentest_actions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    engagement_id UUID NOT NULL REFERENCES pentest_engagements(id) ON DELETE CASCADE,
+    seq INTEGER NOT NULL,
+    phase VARCHAR(30) NOT NULL,
+    agent VARCHAR(40) NOT NULL,
+    action_type VARCHAR(30) NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    command TEXT,
+    output TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'completed',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_pentest_actions_engagement ON pentest_actions(engagement_id, seq);
+
 -- ─── Audit & Agent Logs ─────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -254,6 +271,7 @@ ALTER TABLE security_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE incidents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pentest_engagements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pentest_findings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pentest_actions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
 
 -- ─── Seed Plans ─────────────────────────────────────────────

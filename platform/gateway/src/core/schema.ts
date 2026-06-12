@@ -222,6 +222,21 @@ export const pentestFindings = pgTable("pentest_findings", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const pentestActions = pgTable("pentest_actions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull(),
+  engagementId: uuid("engagement_id").notNull().references(() => pentestEngagements.id),
+  seq: integer("seq").notNull(),
+  phase: varchar("phase", { length: 30 }).notNull(),
+  agent: varchar("agent", { length: 40 }).notNull(),
+  actionType: varchar("action_type", { length: 30 }).notNull(),
+  title: varchar("title", { length: 500 }).notNull(),
+  command: text("command"),
+  output: text("output"),
+  status: varchar("status", { length: 20 }).default("completed").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ─── Audit Log ──────────────────────────────────────────────
 
 export const auditLog = pgTable("audit_log", {
