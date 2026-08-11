@@ -29,7 +29,9 @@ RUN mkdir -p /home/user/.npm && chown -R 1000:1000 /home/user/.npm
 USER user
 
 
-COPY --chown=1000 .env /app/.env
+COPY --chown=1000 .env* /app/
+# Ensure .env exists even if the host file was gitignored or missing
+RUN test -f /app/.env || touch /app/.env
 # Remove empty placeholder values that block .env.local overrides via dotenv-cli -c
 RUN sed -i 's/^MODELS=$/# MODELS=/' /app/.env && \
     sed -i 's/^TASK_MODEL=$/# TASK_MODEL=/' /app/.env
